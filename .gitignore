@@ -23,6 +23,8 @@ dependency-reduced-pom.xml
 buildNumber
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.properties
+jmh/target
+**/.flattened-pom.xml
 
 # IDE - VS Code
 .vscode/
@@ -61,6 +63,3 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
-
-# Neo4j
-neo4j-data
