@@ -13,6 +13,16 @@ A Spring Data-like integration framework for [LadybugDB](https://ladybugdb.com),
 
 ## Quick Start
 
+### Maven dependency
+
+```xml
+<dependency>
+    <groupId>com.thecookiezen</groupId>
+    <artifactId>spring-data-ladybugdb</artifactId>
+    <version>0.0.1</version>
+</dependency>
+```
+
 ### Define an Entity
 
 ```java
