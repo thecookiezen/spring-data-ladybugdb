@@ -38,11 +38,12 @@ class LadybugRepositoryQueryTest {
     static void setupAll() {
         db = new Database(":memory:");
         connectionFactory = new SimpleConnectionFactory(db);
-        template = new LadybugDBTemplate(connectionFactory);
 
         EntityRegistry registry = new EntityRegistry();
         registry.registerDescriptor(Person.class, personReader, personWriter);
         registry.registerDescriptor(Follows.class, followsReader, followsWriter);
+
+        template = new LadybugDBTemplate(connectionFactory, registry);
 
         LadybugDBRepositoryFactory factory = new LadybugDBRepositoryFactory(template, registry);
         repository = factory.getRepository(TestRepository.class);

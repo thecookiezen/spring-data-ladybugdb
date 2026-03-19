@@ -4,6 +4,7 @@ import com.ladybugdb.Connection;
 import com.ladybugdb.Database;
 import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
 import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -40,7 +41,16 @@ class LadybugDBTemplateEmptyCollectionTest {
 
     @BeforeEach
     void setup() {
-        template = new LadybugDBTemplate(connectionFactory);
+        EntityRegistry registry = new EntityRegistry();
+        registry.registerDescriptor(EntityRecord.class,
+                (row) -> {
+                    var e = row.getNode("e");
+                    return new EntityRecord(
+                            ValueMappers.asString(e.get("name")),
+                            ValueMappers.asString(e.get("type")));
+                },
+                (entity) -> Map.of());
+        template = new LadybugDBTemplate(connectionFactory, registry);
         try (Connection conn = new Connection(db)) {
             conn.query(
                     "CREATE NODE TABLE IF NOT EXISTS Entity(name STRING PRIMARY KEY, type STRING, observations STRING[])");
@@ -101,13 +111,7 @@ class LadybugDBTemplateEmptyCollectionTest {
 
         Optional<EntityRecord> result = template.queryForObject(
                 "MERGE (e:Entity {name: $name}) SET e.type = $type, e.observations = $observations RETURN e",
-                Map.of("name", "merge-entity", "type", "concept", "observations", emptyObservations),
-                row -> {
-                    var e = row.getNode("e");
-                    return new EntityRecord(
-                            ValueMappers.asString(e.get("name")),
-                            ValueMappers.asString(e.get("type")));
-                });
+                Map.of("name", "merge-entity", "type", "concept", "observations", emptyObservations), EntityRecord.class);
 
         assertTrue(result.isPresent());
         assertEquals("merge-entity", result.get().name());

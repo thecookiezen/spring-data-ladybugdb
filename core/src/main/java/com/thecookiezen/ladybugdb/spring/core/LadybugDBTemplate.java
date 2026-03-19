@@ -9,6 +9,8 @@ import com.thecookiezen.ladybugdb.spring.connection.LadybugDBConnectionFactory;
 import com.thecookiezen.ladybugdb.spring.mapper.DefaultQueryRow;
 import com.thecookiezen.ladybugdb.spring.mapper.QueryRow;
 import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
 import org.neo4j.cypherdsl.core.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,9 +42,11 @@ public class LadybugDBTemplate {
     private static final Logger logger = LoggerFactory.getLogger(LadybugDBTemplate.class);
 
     private final LadybugDBConnectionFactory connectionFactory;
+    private final EntityRegistry entityRegistry;
 
-    public LadybugDBTemplate(LadybugDBConnectionFactory connectionFactory) {
+    public LadybugDBTemplate(LadybugDBConnectionFactory connectionFactory, EntityRegistry entityRegistry) {
         this.connectionFactory = connectionFactory;
+        this.entityRegistry = entityRegistry;
     }
 
     /**
@@ -398,6 +402,83 @@ public class LadybugDBTemplate {
      */
     public List<String> queryForStringList(String cypher, String columnName) {
         return query(cypher, (row) -> row.getValue(columnName).getValue().toString());
+    }
+
+    /**
+     * Execute a query and return a list of results using the registered entity mapper.
+     *
+     * @param cypher      the Cypher query to execute
+     * @param entityClass the entity class to map results to
+     * @param <T>         the result type
+     * @return a list of results
+     * @throws IllegalArgumentException if no entity descriptor is registered for the class
+     */
+    public <T> List<T> query(String cypher, Class<T> entityClass) {
+        return query(cypher, Map.of(), entityClass);
+    }
+
+    /**
+     * Execute a query and return a list of results using the registered entity mapper.
+     *
+     * @param cypher      the Cypher query to execute
+     * @param parameters  the query parameters
+     * @param entityClass the entity class to map results to
+     * @param <T>         the result type
+     * @return a list of results
+     * @throws IllegalArgumentException if no entity descriptor is registered for the class
+     */
+    public <T> List<T> query(String cypher, Map<String, Object> parameters, Class<T> entityClass) {
+        return query(cypher, parameters, getMapper(entityClass));
+    }
+
+    /**
+     * Execute a query and return an optional result using the registered entity mapper.
+     *
+     * @param cypher      the Cypher query to execute
+     * @param entityClass the entity class to map results to
+     * @param <T>         the result type
+     * @return an optional result
+     * @throws IllegalArgumentException if no entity descriptor is registered for the class
+     */
+    public <T> Optional<T> queryForObject(String cypher, Class<T> entityClass) {
+        return queryForObject(cypher, Map.of(), entityClass);
+    }
+
+    /**
+     * Execute a query and return an optional result using the registered entity mapper.
+     *
+     * @param cypher      the Cypher query to execute
+     * @param parameters  the query parameters
+     * @param entityClass the entity class to map results to
+     * @param <T>         the result type
+     * @return an optional result
+     * @throws IllegalArgumentException if no entity descriptor is registered for the class
+     */
+    public <T> Optional<T> queryForObject(String cypher, Map<String, Object> parameters, Class<T> entityClass) {
+        return queryForObject(cypher, parameters, getMapper(entityClass));
+    }
+
+    /**
+     * Executes a query and returns a Stream of results using the registered entity mapper.
+     * Memory-efficient for large result sets.
+     *
+     * @param cypher      the Cypher query to execute
+     * @param parameters  the query parameters
+     * @param entityClass the entity class to map results to
+     * @param <T>         the result type
+     * @return a stream of results
+     * @throws IllegalArgumentException if no entity descriptor is registered for the class
+     */
+    public <T> Stream<T> stream(String cypher, Map<String, Object> parameters, Class<T> entityClass) {
+        return stream(cypher, parameters, getMapper(entityClass));
+    }
+
+    private <T> RowMapper<T> getMapper(Class<T> entityClass) {
+        EntityDescriptor<T> descriptor = entityRegistry.getDescriptor(entityClass);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("No entity descriptor registered for " + entityClass.getName());
+        }
+        return descriptor.reader();
     }
 
     private void loadExtensions(Connection connection, String[] extensions) {

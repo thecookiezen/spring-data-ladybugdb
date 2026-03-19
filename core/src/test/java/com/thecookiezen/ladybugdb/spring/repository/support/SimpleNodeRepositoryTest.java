@@ -34,16 +34,20 @@ class SimpleNodeRepositoryTest {
     static void setupAll() {
         db = new Database(":memory:");
         connectionFactory = new SimpleConnectionFactory(db);
-        template = new LadybugDBTemplate(connectionFactory);
+
+        EntityRegistry registry = new EntityRegistry();
+        registry.registerDescriptor(Person.class, personReader, personWriter);
+        registry.registerDescriptor(Follows.class, followsReader, followsWriter);
+
+        template = new LadybugDBTemplate(connectionFactory, registry);
 
         try (Connection conn = new Connection(db)) {
             conn.query("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
             conn.query("CREATE REL TABLE FOLLOWS(FROM Person TO Person, name STRING, since INT64)");
         }
 
-        repository = new SimpleNodeRepository<>(template, Person.class, Follows.class,
-                new EntityDescriptor<>(Person.class, personReader, personWriter),
-                new EntityDescriptor<>(Follows.class, followsReader, followsWriter));
+        repository = new SimpleNodeRepository<>(template, Person.class, Follows.class, 
+            registry.getDescriptor(Person.class), registry.getDescriptor(Follows.class));
     }
 
     @AfterEach

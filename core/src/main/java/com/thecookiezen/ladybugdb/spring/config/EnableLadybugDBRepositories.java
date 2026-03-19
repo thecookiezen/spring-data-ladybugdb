@@ -25,8 +25,8 @@ import java.lang.annotation.Target;
  * {@literal @}EnableLadybugDBRepositories(basePackages = "com.example.repositories")
  * public class LadybugDBConfig {
  *     {@literal @}Bean
- *     public LadybugDBTemplate ladybugDBTemplate(LadybugDBConnectionFactory factory) {
- *         return new LadybugDBTemplate(factory);
+ *     public LadybugDBTemplate ladybugDBTemplate(LadybugDBConnectionFactory factory, EntityRegistry registry) {
+ *         return new LadybugDBTemplate(factory, registry);
  *     }
  * }
  * </pre>

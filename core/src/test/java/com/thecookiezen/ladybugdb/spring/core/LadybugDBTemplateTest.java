@@ -4,6 +4,7 @@ import com.ladybugdb.Connection;
 import com.ladybugdb.Database;
 import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
 import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,7 +32,16 @@ class LadybugDBTemplateTest {
 
     @BeforeEach
     void setup() {
-        template = new LadybugDBTemplate(connectionFactory);
+        EntityRegistry registry = new EntityRegistry();
+        registry.registerDescriptor(PersonRecord.class,
+                (row) -> {
+                    var p = row.getNode("p");
+                    return new PersonRecord(
+                            ValueMappers.asString(p.get("name")),
+                            ValueMappers.asInteger(p.get("age")));
+                },
+                (entity) -> Map.of());
+        template = new LadybugDBTemplate(connectionFactory, registry);
         try (Connection conn = new Connection(db)) {
             conn.query("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
         }
@@ -66,13 +77,7 @@ class LadybugDBTemplateTest {
         template.execute("CREATE (p:Person {name: 'Charlie', age: 35})");
 
         List<PersonRecord> people = template.query(
-                "MATCH (p:Person) RETURN p ORDER BY p.name",
-                (row) -> {
-                    var p = row.getNode("p");
-                    return new PersonRecord(
-                            ValueMappers.asString(p.get("name")),
-                            ValueMappers.asInteger(p.get("age")));
-                });
+                "MATCH (p:Person) RETURN p ORDER BY p.name", PersonRecord.class);
 
         assertEquals(2, people.size());
         assertEquals("Bob", people.get(0).name());
@@ -86,13 +91,7 @@ class LadybugDBTemplateTest {
         template.execute("CREATE (p:Person {name: 'David', age: 40})");
 
         Optional<PersonRecord> result = template.queryForObject(
-                "MATCH (p:Person) WHERE p.name = 'David' RETURN p",
-                (row) -> {
-                    var p = row.getNode("p");
-                    return new PersonRecord(
-                            ValueMappers.asString(p.get("name")),
-                            ValueMappers.asInteger(p.get("age")));
-                });
+                "MATCH (p:Person) WHERE p.name = 'David' RETURN p", PersonRecord.class);
 
         assertTrue(result.isPresent());
         assertEquals("David", result.get().name());
@@ -102,13 +101,7 @@ class LadybugDBTemplateTest {
     @Test
     void queryForObject_shouldReturnEmptyWhenNoResults() {
         Optional<PersonRecord> result = template.queryForObject(
-                "MATCH (p:Person) WHERE p.name = 'NonExistent' RETURN p",
-                (row) -> {
-                    var p = row.getNode("p");
-                    return new PersonRecord(
-                            ValueMappers.asString(p.get("name")),
-                            ValueMappers.asInteger(p.get("age")));
-                });
+                "MATCH (p:Person) WHERE p.name = 'NonExistent' RETURN p", PersonRecord.class);
 
         assertTrue(result.isEmpty());
     }
