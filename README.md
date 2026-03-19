@@ -19,7 +19,7 @@ A Spring Data-like integration framework for [LadybugDB](https://ladybugdb.com),
 <dependency>
     <groupId>com.thecookiezen</groupId>
     <artifactId>spring-data-ladybugdb</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
 </dependency>
 ```
 
