@@ -3,13 +3,6 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.3</version>
-        <relativePath/>
-    </parent>
-
     <groupId>com.thecookiezen</groupId>
     <artifactId>spring-data-ladybugdb-parent</artifactId>
     <version>${revision}</version>
@@ -30,6 +23,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <revision>1.0.0-SNAPSHOT</revision>
         <java.version>21</java.version>
+        <spring-framework.version>6.2.17</spring-framework.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.16</logback.version>
         <assertj.version>3.27.7</assertj.version>
@@ -37,6 +31,13 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-framework-bom</artifactId>
+                <version>${spring-framework.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.ladybugdb</groupId>
                 <artifactId>lbug</artifactId>
@@ -51,6 +52,11 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-pool2</artifactId>
                 <version>2.13.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.data</groupId>
+                <artifactId>spring-data-commons</artifactId>
+                <version>3.5.10</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
