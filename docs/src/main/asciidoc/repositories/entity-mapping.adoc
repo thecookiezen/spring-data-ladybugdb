@@ -33,11 +33,6 @@ Marks the primary key field for the entity.
 
 IMPORTANT: LadybugDB node tables require a primary key. The `@Id` field must match the table's primary key definition.
 
-===== Supported ID Types
-
-* `String` -> `STRING PRIMARY KEY`
-* `Integer` / `Long` -> `INT64 PRIMARY KEY`
-
 ==== @RelationshipEntity
 
 Marks a class as a relationship entity connecting two nodes.
@@ -76,20 +71,3 @@ public class Knows {
 * Source and target must be the exact same node type.
 * The `@Id` field stores the relationship's primary key.
 * `sourceField` and `targetField` reference node entity fields.
-
-==== Supported Properties
-
-LadybugDB easily maps primitive Java types to standard graph properties:
-
-* **Strings**: `String` -> `STRING`
-* **Numerics**: `int`/`Integer`, `long`/`Long` -> `INT64`, `double`/`Double` -> `DOUBLE`, `float[]` -> `FLOAT[]`
-* **Booleans**: `boolean`/`Boolean` -> `BOOLEAN`
-* **Collections**: Standard `List<T>` types automatically map to their graph List representations (e.g. `List<String>` -> `STRING[]`).
-
-==== Entity Descriptors and Registry
-
-To persist these entities, LadybugDB needs to know how to read from a `QueryRow` and write into graph properties. 
-
-If you are using Spring Boot, component scanning automatically builds and registers the necessary metadata descriptors (like `EntityDescriptor`, `NodeMetadata`, and `RelationshipMetadata`) onto the `EntityRegistry`.
-
-If you are using LadybugDB programmatically (without Spring Boot DI), you must manually build and register `EntityDescriptor<T>` objects onto the `EntityRegistry` before creating your `SimpleNodeRepository`.

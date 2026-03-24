@@ -61,14 +61,7 @@ include::repositories/entity-mapping.adoc[leveloffset=+1]
 
 include::repositories/relationships.adoc[leveloffset=+1]
 
-[[extensions]]
-== Extensions
-
-include::extensions/vector-search.adoc[leveloffset=+1]
-
 [[reference]]
 == Reference
 
 include::reference/api-overview.adoc[leveloffset=+1]
-
-include::reference/limitations.adoc[leveloffset=+1]

@@ -16,20 +16,20 @@ Creates a new connection for each request and closes it when released. Best for:
 import com.ladybugdb.Database;
 import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
 
-Database database = new Database(":memory:");
-SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
-
-// Get a connection
-Connection connection = factory.getConnection();
-
-// Use the connection...
-connection.query("MATCH (n) RETURN n");
-
-// Release the connection (closes it)
-factory.releaseConnection(connection);
-
-// Close the factory when done
-factory.close();
+try (Database database = new Database(":memory:");
+     SimpleConnectionFactory factory = new SimpleConnectionFactory(database)) {
+    
+    // Get a connection
+    Connection connection = factory.getConnection();
+    
+    try {
+        // Use the connection...
+        connection.query("MATCH (n) RETURN n");
+    } finally {
+        // Release the connection (closes it)
+        factory.releaseConnection(connection);
+    }
+}
 ----
 
 ==== PooledConnectionFactory
@@ -45,23 +45,23 @@ Maintains a pool of connections for efficient reuse. Best for:
 import com.ladybugdb.Database;
 import com.thecookiezen.ladybugdb.spring.connection.PooledConnectionFactory;
 
-Database database = new Database("/path/to/database");
-PooledConnectionFactory factory = new PooledConnectionFactory(database);
-
-// Get a connection from the pool
-Connection connection = factory.getConnection();
-
-// Use the connection...
-
-// Return the connection to the pool
-factory.releaseConnection(connection);
-
-// Monitor pool statistics
-int active = factory.getNumActive();  // Currently in use
-int idle = factory.getNumIdle();      // Available in pool
-
-// Close the pool when done
-factory.close();
+try (Database database = new Database("/path/to/database");
+     PooledConnectionFactory factory = new PooledConnectionFactory(database)) {
+    
+    // Get a connection from the pool
+    Connection connection = factory.getConnection();
+    
+    try {
+        // Use the connection...
+    } finally {
+        // Return the connection to the pool
+        factory.releaseConnection(connection);
+    }
+    
+    // Monitor pool statistics
+    int active = factory.getNumActive();  // Currently in use
+    int idle = factory.getNumIdle();      // Available in pool
+}
 ----
 
 ==== Pool Configuration
@@ -154,7 +154,8 @@ Always close connections and factories when done:
 
 [source,java]
 ----
-try (SimpleConnectionFactory factory = new SimpleConnectionFactory(database)) {
+try (Database database = new Database(":memory:");
+     SimpleConnectionFactory factory = new SimpleConnectionFactory(database)) {
     LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
     // Use template...
 }

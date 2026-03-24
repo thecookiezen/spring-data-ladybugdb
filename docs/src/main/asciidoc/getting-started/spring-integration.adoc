@@ -167,7 +167,7 @@ public class PersonService {
 }
 ----
 
-WARNING: LadybugDB auto-commits each command. The transaction manager provides connection binding only, not atomic transactions. See <<transactions>> for details.
+WARNING: LadybugDB auto-commits each command. The transaction manager provides connection binding only, not atomic transactions. See <<transactions>> and https://docs.ladybugdb.com/cypher/transaction/[LadybugDB Transaction docs] for details.
 
 ==== Connection Pool Configuration
 

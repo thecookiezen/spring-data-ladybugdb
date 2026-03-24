@@ -3,22 +3,10 @@
 
 `ValueMappers` is a utility class for converting LadybugDB `Value` objects to Java types.
 
-==== Overview
-
-[source,java]
-----
-import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
-import com.ladybugdb.Value;
-----
 
 ==== Scalar Types
 
 ===== asString
-
-[source,java]
-----
-public static String asString(Value value)
-----
 
 Converts a Value to String. Returns `null` for null values.
 
@@ -28,11 +16,6 @@ String name = ValueMappers.asString(value);
 ----
 
 ===== asInteger
-
-[source,java]
-----
-public static Integer asInteger(Value value)
-----
 
 Converts a Value to Integer. Handles `Number` types directly.
 
@@ -46,11 +29,6 @@ int primitiveAge = ValueMappers.asInteger(node.get("age"));  // Auto-unboxing
 
 [source,java]
 ----
-public static Long asLong(Value value)
-----
-
-[source,java]
-----
 Long timestamp = ValueMappers.asLong(node.get("createdAt"));
 ----
 
@@ -58,20 +36,10 @@ Long timestamp = ValueMappers.asLong(node.get("createdAt"));
 
 [source,java]
 ----
-public static Double asDouble(Value value)
-----
-
-[source,java]
-----
 Double score = ValueMappers.asDouble(node.get("score"));
 ----
 
 ===== asBoolean
-
-[source,java]
-----
-public static Boolean asBoolean(Value value)
-----
 
 [source,java]
 ----
@@ -83,11 +51,6 @@ Boolean active = ValueMappers.asBoolean(node.get("active"));
 ===== asList
 
 Generic list mapping with element mapper:
-
-[source,java]
-----
-public static <T> List<T> asList(Value value, Function<Value, T> elementMapper)
-----
 
 [source,java]
 ----
@@ -103,11 +66,6 @@ List<Person> people = ValueMappers.asList(value, v -> {
 
 [source,java]
 ----
-public static List<String> asStringList(Value value)
-----
-
-[source,java]
-----
 List<String> tags = ValueMappers.asStringList(node.get("tags"));
 ----
 
@@ -115,43 +73,12 @@ List<String> tags = ValueMappers.asStringList(node.get("tags"));
 
 [source,java]
 ----
-public static List<Integer> asIntegerList(Value value)
-----
-
-[source,java]
-----
 List<Integer> years = ValueMappers.asIntegerList(node.get("years"));
-----
-
-===== asLongList
-
-[source,java]
-----
-public static List<Long> asLongList(Value value)
-----
-
-===== asDoubleList
-
-[source,java]
-----
-public static List<Double> asDoubleList(Value value)
-----
-
-===== asBooleanList
-
-[source,java]
-----
-public static List<Boolean> asBooleanList(Value value)
 ----
 
 ==== Array Types
 
 ===== asFloatArray
-
-[source,java]
-----
-public static float[] asFloatArray(Value value)
-----
 
 Returns `null` for null values. Useful for vector embeddings.
 
@@ -320,46 +247,3 @@ EntityWriter<Document> writer = (entity) -> {
 * Direct `Value.getValue()` is used internally for optimal performance
 * No intermediate string conversion for numeric types
 * List operations allocate new collections (not cached)
-
-==== Complete Example
-
-[source,java]
-----
-import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
-import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
-import java.util.List;
-import java.util.Map;
-
-public class Document {
-    private String id;
-    private String title;
-    private String content;
-    private List<String> tags;
-    private float[] embedding;
-    private int viewCount;
-    private double relevanceScore;
-    private boolean published;
-    
-    // constructors, getters...
-}
-
-RowMapper<Document> documentMapper = (row) -> {
-    Map<String, Value> node = row.getNode("n");
-    
-    return new Document(
-        ValueMappers.asString(node.get("id")),
-        ValueMappers.asString(node.get("title")),
-        ValueMappers.asString(node.get("content")),
-        ValueMappers.asStringList(node.get("tags")),
-        ValueMappers.asFloatArray(node.get("embedding")),
-        ValueMappers.asInteger(node.get("viewCount")),
-        ValueMappers.asDouble(node.get("relevanceScore")),
-        ValueMappers.asBoolean(node.get("published"))
-    );
-};
-
-List<Document> docs = template.query(
-    "MATCH (n:Document) WHERE n.published = true RETURN n",
-    documentMapper
-);
-----

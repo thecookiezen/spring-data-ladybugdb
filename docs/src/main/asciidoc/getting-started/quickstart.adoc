@@ -165,24 +165,22 @@ import com.thecookiezen.ladybugdb.spring.repository.support.*;
 
 public class QuickStart {
     public static void main(String[] args) {
-        Database database = new Database(":memory:");
-        SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
-        EntityRegistry registry = new EntityRegistry();
-        
-        // Register mappers (see step 5)
-        registry.registerDescriptor(Person.class, personDescriptor);
-        
-        LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
-        
-        template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
-        
-        template.execute("CREATE (p:Person {name: 'Alice', age: 30})");
-        
-        List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
-        System.out.println("Found " + people.size() + " people");
-        
-        factory.close();
-        database.close();
+        try (Database database = new Database(":memory:");
+             SimpleConnectionFactory factory = new SimpleConnectionFactory(database)) {
+            EntityRegistry registry = new EntityRegistry();
+            
+            // Register mappers (see step 5)
+            registry.registerDescriptor(Person.class, personDescriptor);
+            
+            LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+            
+            template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
+            
+            template.execute("CREATE (p:Person {name: 'Alice', age: 30})");
+            
+            List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
+            System.out.println("Found " + people.size() + " people");
+        }
     }
 }
 ----
