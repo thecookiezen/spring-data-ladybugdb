@@ -1,0 +1,36 @@
+=== API Overview
+:rev: {project-version}
+
+This section provides a quick reference for the key packages and interfaces in Spring Data LadybugDB. Use this as a high-level guide to locate the right abstractions. For comprehensive method signatures, please consult the Javadocs and your IDE.
+
+==== Core Package (`com.thecookiezen.ladybugdb.spring.core`)
+
+Provides the primary template class (`LadybugDBTemplate`) for executing database operations. This is the main entry point for executing Cypher queries and managing core connections.
+
+==== Connection Package (`com.thecookiezen.ladybugdb.spring.connection`)
+
+Contains factory interfaces and implementations (`LadybugDBConnectionFactory`, `SimpleConnectionFactory`, `PooledConnectionFactory`) for managing database connections. Choose between simple (one connection per operation) or pooled (reusable connections) factories based on your performance requirements.
+
+==== Mapper Package (`com.thecookiezen.ladybugdb.spring.mapper`)
+
+Includes interfaces and utilities for converting between database rows and Java objects. Implement `RowMapper` for reading data and `EntityWriter` for writing data. The `ValueMappers` utility provides type-safe conversions for common data types.
+
+==== Repository Package
+
+The repository package provides Spring Data-style repository abstractions for CRUD operations. 
+
+* **`com.thecookiezen.ladybugdb.spring.repository`**: Contains `NodeRepository`, the primary interface for entity persistence.
+* **`com.thecookiezen.ladybugdb.spring.repository.support`**: Contains implementation classes (`SimpleNodeRepository`) and infrastructure (`EntityRegistry`).
+* **`com.thecookiezen.ladybugdb.spring.repository.query`**: Handles custom queries defined with the `@Query` annotation.
+
+==== Annotation Package (`com.thecookiezen.ladybugdb.spring.annotation`)
+
+Defines custom annotations (`@NodeEntity`, `@RelationshipEntity`, `@Query`) for marking entity classes and defining custom queries. These annotations are processed at runtime to configure entity mapping behavior.
+
+==== Transaction Package (`com.thecookiezen.ladybugdb.spring.transaction`)
+
+Provides Spring's `PlatformTransactionManager` integration via `LadybugDBTransactionManager`. Note that LadybugDB currently auto-commits each operation, so this manager primarily handles connection binding and context propagation.
+
+==== Configuration Package (`com.thecookiezen.ladybugdb.spring.config`)
+
+Provides Spring's annotation-based configuration (`@EnableLadybugDBRepositories`) for enabling and registering LadybugDB repositories in your application context.

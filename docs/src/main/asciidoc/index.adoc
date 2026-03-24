@@ -1,0 +1,74 @@
+= Spring Data LadybugDB
+:doctype: book
+:rev: {project-version}
+:toc: left
+:toclevels: 3
+:numbered:
+:icons: font
+:hide-uri-scheme:
+:docinfo: shared
+
+Spring Data LadybugDB is a Spring Data-like integration framework for https://ladybugdb.com[LadybugDB], providing familiar Spring patterns for graph database operations.
+
+[[overview]]
+== Overview
+
+include::overview/architecture.adoc[]
+
+include::overview/core-components.adoc[]
+
+include::overview/dependencies.adoc[]
+
+[[getting-started]]
+== Getting Started
+
+include::getting-started/installation.adoc[leveloffset=+1]
+
+include::getting-started/quickstart.adoc[leveloffset=+1]
+
+include::getting-started/spring-integration.adoc[leveloffset=+1]
+
+[[core-concepts]]
+== Core Concepts
+
+include::core-concepts/connection-factories.adoc[leveloffset=+1]
+
+include::core-concepts/template.adoc[leveloffset=+1]
+
+include::core-concepts/transactions.adoc[leveloffset=+1]
+
+include::core-concepts/entity-registry.adoc[leveloffset=+1]
+
+[[querying]]
+== Querying
+
+include::querying/raw-cypher.adoc[leveloffset=+1]
+
+include::querying/cypher-dsl.adoc[leveloffset=+1]
+
+include::querying/row-mappers.adoc[leveloffset=+1]
+
+include::querying/value-mappers.adoc[leveloffset=+1]
+
+[[repositories]]
+== Repositories
+
+include::repositories/node-repository.adoc[leveloffset=+1]
+
+include::repositories/custom-queries.adoc[leveloffset=+1]
+
+include::repositories/entity-mapping.adoc[leveloffset=+1]
+
+include::repositories/relationships.adoc[leveloffset=+1]
+
+[[extensions]]
+== Extensions
+
+include::extensions/vector-search.adoc[leveloffset=+1]
+
+[[reference]]
+== Reference
+
+include::reference/api-overview.adoc[leveloffset=+1]
+
+include::reference/limitations.adoc[leveloffset=+1]

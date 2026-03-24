@@ -1,0 +1,384 @@
+=== Vector Search Extension
+:rev: {project-version}
+
+LadybugDB supports vector search through the `vector` extension. This guide shows how to use vector operations with Spring Data LadybugDB.
+
+==== Installing the Extension
+
+[source,java]
+----
+template.execute("INSTALL vector");
+----
+
+NOTE: Extension installation is typically done once during database setup.
+
+==== Loading Extensions
+
+Extensions must be loaded before using their functions.
+
+===== With Template
+
+[source,java]
+----
+// Load extension for single query
+List<Document> similar = template.query(
+    new String[]{"vector"},  // Extensions to load
+    "MATCH (n:Document) WHERE vector_search(n.embedding, $query) < 0.5 RETURN n",
+    Map.of("query", queryVector),
+    Document.class
+);
+
+// Load for execute
+template.execute(
+    new String[]{"vector"},
+    "MATCH (n:Document {id: $id}) SET n.embedding = $embedding",
+    Map.of("id", "doc1", "embedding", embedding)
+);
+----
+
+===== With @Query Annotation
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.Query;
+
+public interface DocumentRepository extends NodeRepository<Document, String, Void, Document> {
+
+    @Query(
+        value = "MATCH (n:Document) WHERE vector_search(n.embedding, $query, metric := 'cosine') < $threshold RETURN n",
+        loadExtensions = {"vector"}
+    )
+    List<Document> findSimilar(
+        @Param("query") float[] query,
+        @Param("threshold") double threshold
+    );
+    
+    @Query(
+        value = "MATCH (n:Document {id: $id}) SET n.embedding = $embedding",
+        loadExtensions = {"vector"},
+        modifying = true
+    )
+    void updateEmbedding(@Param("id") String id, @Param("embedding") float[] embedding);
+}
+----
+
+==== Document Entity
+
+Define a document entity with an embedding field:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.NodeEntity;
+import org.springframework.data.annotation.Id;
+import java.util.List;
+
+@NodeEntity(label = "Document")
+public class Document {
+    @Id
+    private String id;
+    private String title;
+    private String content;
+    private float[] embedding;
+    
+    public Document() {}
+    
+    public Document(String id, String title, String content, float[] embedding) {
+        this.id = id;
+        this.title = title;
+        this.content = content;
+        this.embedding = embedding;
+    }
+    
+    // getters and setters
+}
+----
+
+==== Entity Descriptor
+
+Create mappers that handle float arrays:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.EntityWriter;
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
+
+RowMapper<Document> reader = (row) -> {
+    var node = row.getNode("n");
+    return new Document(
+        ValueMappers.asString(node.get("id")),
+        ValueMappers.asString(node.get("title")),
+        ValueMappers.asString(node.get("content")),
+        ValueMappers.asFloatArray(node.get("embedding"))
+    );
+};
+
+EntityWriter<Document> writer = (entity) -> {
+    Map<String, Object> props = new HashMap<>();
+    props.put("title", entity.getTitle());
+    props.put("content", entity.getContent());
+    props.put("embedding", entity.getEmbedment());
+    return props;
+};
+
+EntityDescriptor<Document> descriptor = new EntityDescriptor<>(Document.class, reader, writer);
+----
+
+==== Creating the Table
+
+[source,java]
+----
+template.execute("""
+    CREATE NODE TABLE Document(
+        id STRING PRIMARY KEY,
+        title STRING,
+        content STRING,
+        embedding FLOAT[]
+    )
+    """);
+----
+
+==== Vector Operations
+
+===== Storing Documents with Embeddings
+
+[source,java]
+----
+// Generate embedding (using your ML model)
+float[] embedding = embeddingService.generateEmbedment("This is the document content");
+
+Document doc = new Document("doc1", "Title", "This is the document content", embedding);
+template.execute(
+    new String[]{"vector"},
+    "CREATE (n:Document {id: $id, title: $title, content: $content, embedding: $embedding})",
+    Map.of(
+        "id", doc.getId(),
+        "title", doc.getTitle(),
+        "content", doc.getContent(),
+        "embedding", doc.getEmbedment()
+    )
+);
+----
+
+===== Similarity Search
+
+[source,java]
+----
+float[] queryVector = embeddingService.generateEmbedment("search query");
+
+List<Document> similar = template.query(
+    new String[]{"vector"},
+    "MATCH (n:Document) WHERE vector_search(n.embedding, $query, metric := 'cosine') < 0.3 RETURN n ORDER BY vector_search(n.embedding, $query) ASC LIMIT 10",
+    Map.of("query", queryVector),
+    Document.class
+);
+----
+
+===== With Repository
+
+[source,java]
+----
+public interface DocumentRepository extends NodeRepository<Document, String, Void, Document> {
+
+    @Query(
+        value = """
+            MATCH (n:Document)
+            WHERE vector_search(n.embedding, $query, metric := 'cosine') < $threshold
+            RETURN n
+            ORDER BY vector_search(n.embedding, $query) ASC
+            LIMIT $limit
+            """,
+        loadExtensions = {"vector"}
+    )
+    List<Document> findSimilar(
+        @Param("query") float[] query,
+        @Param("threshold") double threshold,
+        @Param("limit") int limit
+    );
+    
+    @Query(
+        value = "MATCH (n:Document) RETURN vector_search(n.embedding, $query) AS score, n",
+        loadExtensions = {"vector"}
+    )
+    List<ScoredDocument> findAllWithScores(@Param("query") float[] query);
+}
+----
+
+==== Distance Metrics
+
+LadybugDB supports different distance metrics:
+
+===== Cosine Similarity
+
+[source,java]
+----
+// Cosine distance (lower is more similar)
+WHERE vector_search(n.embedding, $query, metric := 'cosine') < 0.3
+----
+
+===== Euclidean Distance
+
+[source,java]
+----
+// L2 distance (lower is more similar)
+WHERE vector_search(n.embedding, $query, metric := 'euclidean') < 1.0
+----
+
+===== Inner Product
+
+[source,java]
+----
+// Dot product (higher is more similar)
+WHERE vector_search(n.embedding, $query, metric := 'dot') > 0.8
+----
+
+==== Batch Operations
+
+===== Bulk Insert with Embeddings
+
+[source,java]
+----
+@Transactional
+public void insertDocuments(List<Document> documents) {
+    for (Document doc : documents) {
+        float[] embedding = embeddingService.generateEmbedment(doc.getContent());
+        doc.setEmbedding(embedding);
+        
+        template.execute(
+            new String[]{"vector"},
+            "CREATE (n:Document {id: $id, title: $title, content: $content, embedding: $embedding})",
+            Map.of(
+                "id", doc.getId(),
+                "title", doc.getTitle(),
+                "content", doc.getContent(),
+                "embedding", doc.getEmbedment()
+            )
+        );
+    }
+}
+----
+
+===== Streaming Similar Results
+
+[source,java]
+----
+try (Stream<Document> stream = template.stream(
+        new String[]{"vector"},
+        "MATCH (n:Document) WHERE vector_search(n.embedding, $query, metric := 'cosine') < 0.5 RETURN n",
+        Map.of("query", queryVector),
+        Document.class)) {
+    
+    stream.forEach(doc -> {
+        // Process each similar document
+        System.out.println("Similar: " + doc.getTitle());
+    });
+}
+----
+
+==== Configuration
+
+===== Extension Directory
+
+Set the extension directory if needed:
+
+[source,java]
+----
+template.execute("CALL home_directory='/path/to/extensions'");
+template.execute("INSTALL vector");
+----
+
+===== Check Extension Status
+
+[source,java]
+----
+List<String> extensions = template.queryForStringList(
+    "CALL show_extensions()",
+    "name"
+);
+----
+
+==== Error Handling
+
+===== Extension Not Loaded
+
+[source,java]
+----
+try {
+    List<Document> similar = template.query(
+        "MATCH (n:Document) WHERE vector_search(n.embedding, $query) < 0.5 RETURN n",
+        Map.of("query", queryVector),
+        Document.class
+    );
+} catch (Exception e) {
+    if (e.getMessage().contains("vector_search")) {
+        // Extension not loaded - retry with loadExtensions
+        List<Document> similar = template.query(
+            new String[]{"vector"},
+            "MATCH (n:Document) WHERE vector_search(n.embedding, $query) < 0.5 RETURN n",
+            Map.of("query", queryVector),
+            Document.class
+        );
+    }
+}
+----
+
+==== Complete Example
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.repository.support.*;
+import java.util.*;
+
+public class VectorSearchExample {
+    public static void main(String[] args) {
+        Database database = new Database(":memory:");
+        SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
+        EntityRegistry registry = new EntityRegistry();
+        
+        registry.registerDescriptor(Document.class, documentDescriptor);
+        
+        LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+        
+        // Setup
+        template.execute("INSTALL vector");
+        template.execute("""
+            CREATE NODE TABLE Document(
+                id STRING PRIMARY KEY,
+                title STRING,
+                content STRING,
+                embedding FLOAT[]
+            )
+            """);
+        
+        // Insert documents
+        float[] emb1 = {0.1f, 0.2f, 0.3f};
+        float[] emb2 = {0.4f, 0.5f, 0.6f};
+        float[] query = {0.15f, 0.25f, 0.35f};
+        
+        template.execute(new String[]{"vector"},
+            "CREATE (n:Document {id: $id, title: $title, embedding: $embedding})",
+            Map.of("id", "doc1", "title", "Doc 1", "embedding", emb1));
+        
+        template.execute(new String[]{"vector"},
+            "CREATE (n:Document {id: $id, title: $title, embedding: $embedding})",
+            Map.of("id", "doc2", "title", "Doc 2", "embedding", emb2));
+        
+        // Search
+        List<Document> similar = template.query(
+            new String[]{"vector"},
+            "MATCH (n:Document) WHERE vector_search(n.embedding, $query, metric := 'cosine') < 0.5 RETURN n",
+            Map.of("query", query),
+            Document.class
+        );
+        
+        System.out.println("Found " + similar.size() + " similar documents");
+        
+        factory.close();
+        database.close();
+    }
+}
+----

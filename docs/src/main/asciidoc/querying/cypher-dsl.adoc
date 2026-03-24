@@ -1,0 +1,69 @@
+=== Cypher DSL
+:rev: {project-version}
+
+Neo4j's Cypher DSL allows you to build queries programmatically instead of writing raw Cypher strings. This approach provides several benefits:
+
+* **Type safety** - Compiler catches errors before runtime
+* **IDE support** - Auto-completion and refactoring work naturally
+* **Composability** - Build complex queries from reusable parts
+* **Readability** - Fluent API mirrors Cypher syntax
+
+Use the DSL when building dynamic queries or when you want compile-time validation. For simple, static queries, raw Cypher may be more concise.
+
+==== Dependency
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.neo4j</groupId>
+    <artifactId>neo4j-cypher-dsl</artifactId>
+    <version>2025.2.4</version>
+</dependency>
+----
+
+==== Basic Usage
+
+Here is a basic example of creating and executing a query using the Cypher DSL:
+
+[source,java]
+----
+import org.neo4j.cypherdsl.core.Cypher;
+import org.neo4j.cypherdsl.core.Node;
+import org.neo4j.cypherdsl.core.Statement;
+import java.util.Map;
+import java.util.List;
+
+// 1. Define the node
+Node person = Cypher.node("Person").named("p");
+
+// 2. Build the statement
+Statement statement = Cypher.match(person)
+    .where(person.property("age").gt(Cypher.parameter("minAge")))
+    .returning(person)
+    .orderBy(person.property("name").ascending())
+    .build();
+
+// 3. Execute with LadybugTemplate
+List<Person> adults = template.query(
+    statement, 
+    Map.of("minAge", 18), 
+    Person.class
+);
+----
+
+==== Getting Cypher String
+
+For debugging or logging, you can easily get the generated Cypher string:
+
+[source,java]
+----
+String cypher = statement.getCypher();
+System.out.println("Generated Cypher: " + cypher);
+----
+
+==== Further Reading
+
+For comprehensive documentation, advanced query building (including relationships, aggregations, and complex conditions), and more details on how to use the Neo4j Cypher DSL, please refer to the official documentation:
+
+👉 **{empty}link:https://neo4j.github.io/cypher-dsl/2025.2.5/[Neo4j Cypher DSL Documentation]**
+

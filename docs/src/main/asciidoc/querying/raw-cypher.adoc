@@ -1,0 +1,136 @@
+=== Raw Cypher Queries
+:rev: {project-version}
+
+Execute Cypher queries directly using string-based query syntax with parameterized values.
+
+==== Parameterized Queries
+
+Always use parameters (`$paramName`) instead of string interpolation to prevent Cypher injection:
+
+[source,java]
+----
+import java.util.Map;
+
+// Execute a write operation
+template.execute(
+    "CREATE (p:Person {name: $name, age: $age})",
+    Map.of("name", "Alice", "age", 30)
+);
+
+// Query for a list of results
+List<Person> people = template.query(
+    "MATCH (n:Person) WHERE n.name IN $names RETURN n",
+    Map.of("names", List.of("Alice", "Bob", "Charlie")),
+    Person.class
+);
+----
+
+==== Query Methods
+
+===== execute() - Write Operations
+
+For CREATE, MERGE, DELETE, SET operations and extensions:
+
+[source,java]
+----
+// With parameters
+template.execute(
+    "CREATE (p:Person {name: $name, age: $age})",
+    Map.of("name", "Bob", "age", 25)
+);
+
+// With extensions (e.g., vector search)
+template.execute(
+    new String[]{"vector"},
+    "INSTALL vector",
+    Map.of()
+);
+----
+
+===== query() - Return List
+
+For queries returning multiple results:
+
+[source,java]
+----
+import java.util.List;
+
+List<Person> people = template.query(
+    "MATCH (n:Person) WHERE n.age > $minAge RETURN n ORDER BY n.name",
+    Map.of("minAge", 18),
+    Person.class
+);
+
+// With custom RowMapper
+List<String> names = template.query(
+    "MATCH (n:Person) RETURN n.name AS name ORDER BY name",
+    (row) -> ValueMappers.asString(row.getValue("name"))
+);
+----
+
+===== queryForObject() - Return Single
+
+For queries expecting zero or one result:
+
+[source,java]
+----
+import java.util.Optional;
+
+Optional<Person> person = template.queryForObject(
+    "MATCH (n:Person) WHERE n.name = $name RETURN n",
+    Map.of("name", "Alice"),
+    Person.class
+);
+
+if (person.isPresent()) {
+    System.out.println("Found: " + person.get().getName());
+}
+----
+
+===== queryForStringList() - Return String Column
+
+For single-column string results:
+
+[source,java]
+----
+import java.util.List;
+
+List<String> names = template.queryForStringList(
+    "MATCH (n:Person) RETURN n.name AS name ORDER BY name",
+    "name"
+);
+----
+
+==== Security
+
+===== Cypher Injection Prevention
+
+WARNING: Never concatenate user input into Cypher strings.
+
+[source,java]
+----
+// DANGEROUS - Vulnerable to injection
+String unsafe = "Alice' OR 1=1 //";
+template.execute("CREATE (p:Person {name: '" + unsafe + "'})");
+
+// SAFE - Use parameters
+template.execute(
+    "CREATE (p:Person {name: $name})",
+    Map.of("name", unsafe)  // Safely escaped
+);
+----
+
+===== Security Warning Log
+
+The template logs a warning when detecting potentially unsafe queries:
+
+[source]
+----
+SECURITY: Detected Cypher query with multiple literals and no parameters. Query: MATCH (n:Person {name: 'Alice', age: 30}) RETURN n
+----
+
+==== Advanced Cypher Queries
+
+For more complex queries (Pattern Matching, Aggregations, Subqueries, Updates), please consult the Neo4j Cypher Manual:
+
+👉 **{empty}link:https://neo4j.github.io/cypher-dsl/2025.2.5/[Neo4j Cypher Manual]**

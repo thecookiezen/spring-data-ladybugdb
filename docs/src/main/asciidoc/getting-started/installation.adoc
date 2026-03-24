@@ -1,0 +1,64 @@
+=== Installation
+:rev: {project-version}
+
+This section covers how to add Spring Data LadybugDB to your project. The framework requires the main library dependency, the LadybugDB native library, and optionally the Cypher DSL and connection pooling libraries.
+
+==== Maven Dependency
+
+Add the following dependency to your `pom.xml`:
+
+[source,xml]
+----
+<dependency>
+    <groupId>com.thecookiezen</groupId>
+    <artifactId>spring-data-ladybugdb</artifactId>
+    <version>0.0.2</version>
+</dependency>
+----
+
+==== Required Dependencies
+
+Ensure you have the following dependencies in your project:
+
+===== LadybugDB Native Library
+
+[source,xml]
+----
+<dependency>
+    <groupId>com.ladybugdb</groupId>
+    <artifactId>lbug</artifactId>
+    <version>0.15.1</version>
+</dependency>
+----
+
+===== Neo4j Cypher DSL (Optional)
+
+For type-safe query building:
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.neo4j</groupId>
+    <artifactId>neo4j-cypher-dsl</artifactId>
+    <version>2025.2.4</version>
+</dependency>
+----
+
+===== Apache Commons Pool2 (Optional)
+
+For connection pooling:
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-pool2</artifactId>
+    <version>2.13.1</version>
+</dependency>
+----
+
+==== System Requirements
+
+* **Java**: 21 or higher
+* **Spring Framework**: 6.x
+* **LadybugDB**: 0.15.0 or higher

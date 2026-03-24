@@ -1,0 +1,277 @@
+=== LadybugDBTemplate
+:rev: {project-version}
+
+The `LadybugDBTemplate` is the central class for executing Cypher queries. It provides:
+
+* Automatic connection management
+* Parameterized query support
+* Result mapping through `RowMapper`
+* Memory-efficient streaming for large results
+* Transaction-aware connection binding
+
+==== Creating a Template
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+
+Database database = new Database(":memory:");
+SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
+EntityRegistry registry = new EntityRegistry();
+
+LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+----
+
+==== Execute Operations
+
+Execute write operations (CREATE, MERGE, DELETE, SET):
+
+===== Execute without parameters
+
+[source,java]
+----
+template.execute("CREATE (p:Person {name: 'Alice', age: 30})");
+----
+
+===== Execute with parameters
+
+[source,java]
+----
+import java.util.Map;
+
+template.execute(
+    "CREATE (p:Person {name: $name, age: $age})",
+    Map.of("name", "Bob", "age", 25)
+);
+----
+
+===== Execute with Statement (Cypher DSL)
+
+[source,java]
+----
+import org.neo4j.cypherdsl.core.Cypher;
+import org.neo4j.cypherdsl.core.Node;
+import org.neo4j.cypherdsl.core.Statement;
+
+Node person = Cypher.node("Person").named("p")
+    .withProperties("name", Cypher.parameter("name"));
+Statement statement = Cypher.merge(person).returning(person).build();
+
+template.execute(statement, Map.of("name", "Charlie"));
+----
+
+==== Query Operations
+
+===== Query returning a List
+
+[source,java]
+----
+import java.util.List;
+
+List<Person> people = template.query(
+    "MATCH (n:Person) WHERE n.age > $minAge RETURN n",
+    Map.of("minAge", 20),
+    Person.class
+);
+----
+
+===== Query with custom RowMapper
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import java.util.List;
+
+List<Person> people = template.query(
+    "MATCH (n:Person) RETURN n ORDER BY n.name",
+    (row) -> {
+        var node = row.getNode("n");
+        return new Person(
+            ValueMappers.asString(node.get("name")),
+            ValueMappers.asInteger(node.get("age"))
+        );
+    }
+);
+----
+
+===== Query returning single result
+
+[source,java]
+----
+import java.util.Optional;
+
+Optional<Person> person = template.queryForObject(
+    "MATCH (n:Person) WHERE n.name = $name RETURN n",
+    Map.of("name", "Alice"),
+    Person.class
+);
+
+if (person.isPresent()) {
+    System.out.println("Found: " + person.get());
+}
+----
+
+===== Query with Cypher DSL Statement
+
+[source,java]
+----
+import org.neo4j.cypherdsl.core.Cypher;
+import org.neo4j.cypherdsl.core.Node;
+import org.neo4j.cypherdsl.core.Statement;
+
+Node n = Cypher.node("Person").named("n");
+Statement statement = Cypher.match(n)
+    .where(n.property("age").gt(Cypher.parameter("minAge")))
+    .returning(n)
+    .build();
+
+List<Person> people = template.query(statement, Map.of("minAge", 20), Person.class);
+----
+
+==== Streaming Results
+
+For large result sets, use `stream()` for memory efficiency:
+
+[source,java]
+----
+import java.util.stream.Stream;
+
+try (Stream<Person> stream = template.stream(
+        "MATCH (n:Person) RETURN n",
+        Map.of(),
+        Person.class)) {
+    
+    stream.forEach(person -> {
+        // Process each person
+        System.out.println(person.getName());
+    });
+}
+----
+
+IMPORTANT: Always use try-with-resources to ensure proper resource cleanup. The stream holds database resources until closed.
+
+==== Callback Execution
+
+Execute custom logic with direct connection access:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBCallback;
+
+Long count = template.execute((connection) -> {
+    try (var result = connection.query("MATCH (n:Person) RETURN count(n) AS count")) {
+        if (result.hasNext()) {
+            return result.getNext().getValue(0).getValue();
+        }
+        return 0L;
+    }
+});
+----
+
+==== Query For String List
+
+Convenience method for single-column string results:
+
+[source,java]
+----
+import java.util.List;
+
+List<String> names = template.queryForStringList(
+    "MATCH (n:Person) RETURN n.name AS name ORDER BY name",
+    "name"
+);
+----
+
+==== Extension Loading
+
+Load extensions before executing queries:
+
+[source,java]
+----
+import java.util.List;
+
+List<Note> similarNotes = template.query(
+    new String[]{"vector"},  // Extensions to load
+    "MATCH (n:Note) WHERE vector_search(n.embedding, $query) < 0.5 RETURN n",
+    Map.of("query", queryVector),
+    Note.class
+);
+----
+
+==== Parameter Types
+
+The template automatically converts Java types to LadybugDB Values:
+
+[cols="1,1"]
+|===
+| Java Type | LadybugDB Type
+
+| `String`
+| STRING
+
+| `Integer`, `int`
+| INT64
+
+| `Long`, `long`
+| INT64
+
+| `Double`, `double`
+| DOUBLE
+
+| `Boolean`, `boolean`
+| BOOLEAN
+
+| `float[]`
+| LIST (of FLOAT)
+
+| `List<T>`
+| LIST
+
+| `Map<String, Object>`
+| MAP
+
+| `Value`
+| (passed through)
+|===
+
+===== Array Parameters
+
+[source,java]
+----
+template.execute(
+    "CREATE (p:Person {name: $name, scores: $scores})",
+    Map.of(
+        "name", "Alice",
+        "scores", new float[]{0.1f, 0.2f, 0.3f}
+    )
+);
+----
+
+===== List Parameters
+
+[source,java]
+----
+template.query(
+    "MATCH (n:Person) WHERE n.name IN $names RETURN n",
+    Map.of("names", List.of("Alice", "Bob", "Charlie")),
+    Person.class
+);
+----
+
+==== CypherMappingException
+
+Thrown when row mapping fails:
+
+[source,java]
+----
+try {
+    List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
+} catch (LadybugDBTemplate.CypherMappingException e) {
+    // Handle mapping error
+    logger.error("Failed to map result", e);
+}
+----

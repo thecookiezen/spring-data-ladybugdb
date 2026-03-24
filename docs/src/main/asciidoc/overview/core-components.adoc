@@ -1,0 +1,31 @@
+[[core-components]]
+=== Core Components
+
+==== LadybugDBTemplate
+The central class for executing Cypher queries. Provides methods for:
+
+* `execute()` - Execute write operations
+* `query()` - Execute queries returning lists
+* `queryForObject()` - Execute queries returning single results
+* `stream()` - Memory-efficient streaming for large result sets
+
+==== NodeRepository
+A Spring Data-style repository interface providing CRUD operations:
+
+* `save()`, `saveAll()` - Persist entities
+* `findById()`, `findAll()`, `findAllById()` - Retrieve entities
+* `delete()`, `deleteById()`, `deleteAll()` - Remove entities
+* `count()`, `existsById()` - Utility methods
+
+==== Connection Factories
+Two implementations for connection management:
+
+* `SimpleConnectionFactory` - Creates new connections per request
+* `PooledConnectionFactory` - Connection pooling with Apache Commons Pool2
+
+==== Entity Mapping
+Annotation-based mapping for graph entities:
+
+* `@NodeEntity` - Marks a class as a node entity
+* `@RelationshipEntity` - Marks a class as a relationship entity
+* `@Id` - Marks the primary key field

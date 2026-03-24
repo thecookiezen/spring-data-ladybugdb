@@ -1,0 +1,398 @@
+=== Relationships
+:rev: {project-version}
+
+Create and manage relationships between nodes using the repository API.
+
+==== Relationship Entity Definition
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.RelationshipEntity;
+import org.springframework.data.annotation.Id;
+
+@RelationshipEntity(
+    type = "FOLLOWS",
+    nodeType = Person.class,
+    sourceField = "from",
+    targetField = "to"
+)
+public class Follows {
+    @Id
+    String name;
+    Person from;
+    Person to;
+    int since;
+    
+    public Follows() {}
+    
+    public Follows(String name, Person from, Person to, int since) {
+        this.name = name;
+        this.from = from;
+        this.to = to;
+        this.since = since;
+    }
+}
+----
+
+==== Creating Relationship Table
+
+Before creating relationships, define the relationship table:
+
+[source,java]
+----
+template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
+template.execute("CREATE REL TABLE FOLLOWS(FROM Person TO Person, name STRING PRIMARY KEY, since INT64)");
+----
+
+==== Registering Descriptors
+
+Register both node and relationship descriptors:
+
+[source,java]
+----
+EntityRegistry registry = new EntityRegistry();
+
+registry.registerDescriptor(Person.class, personDescriptor);
+registry.registerDescriptor(Follows.class, followsDescriptor);
+----
+
+===== Relationship Writer
+
+[source,java]
+----
+EntityWriter<Follows> followsWriter = (entity) -> Map.of(
+    "name", entity.name,
+    "since", entity.since
+    // from/to handled by repository
+);
+----
+
+===== Relationship Reader
+
+[source,java]
+----
+RowMapper<Follows> followsReader = (row) -> {
+    RelationshipData rel = row.getRelationship("rel");
+    Map<String, Value> sourceNode = row.getNode("s");
+    Map<String, Value> targetNode = row.getNode("t");
+    
+    String name = ValueMappers.asString(rel.properties().get("name"));
+    int since = ValueMappers.asInteger(rel.properties().get("since"));
+    
+    Person from = new Person(
+        ValueMappers.asString(sourceNode.get("name")),
+        ValueMappers.asInteger(sourceNode.get("age"))
+    );
+    
+    Person to = new Person(
+        ValueMappers.asString(targetNode.get("name")),
+        ValueMappers.asInteger(targetNode.get("age"))
+    );
+    
+    return new Follows(name, from, to, since);
+};
+----
+
+==== CRUD Operations
+
+===== Create Relationship
+
+[source,java]
+----
+SimpleNodeRepository<Person, Follows, String> repository = new SimpleNodeRepository<>(
+    template, Person.class, Follows.class,
+    personDescriptor, followsDescriptor
+);
+
+// First create nodes
+Person alice = repository.save(new Person("Alice", 30));
+Person bob = repository.save(new Person("Bob", 25));
+
+// Create relationship
+Follows follows = new Follows("alice_bob", alice, bob, 2020);
+Follows created = repository.createRelation(alice, bob, follows);
+----
+
+The generated Cypher:
+
+[source,cypher]
+----
+MATCH (s:Person {name: $sourceId}), (t:Person {name: $targetId})
+MERGE (s)-[rel:FOLLOWS {name: $name}]->(t)
+SET rel.since = $since
+RETURN s, t, rel
+----
+
+===== Find Relationship By ID
+
+[source,java]
+----
+Optional<Follows> found = repository.findRelationById("alice_bob");
+
+if (found.isPresent()) {
+    Follows f = found.get();
+    System.out.println(f.from.name + " follows " + f.to.name + " since " + f.since);
+}
+----
+
+===== Find Relationships By Source
+
+Find all relationships from a specific node:
+
+[source,java]
+----
+Person alice = repository.findById("Alice").orElseThrow();
+List<Follows> relationships = repository.findRelationsBySource(alice);
+
+for (Follows f : relationships) {
+    System.out.println("Alice follows " + f.to.name);
+}
+----
+
+===== Find All Relationships
+
+[source,java]
+----
+List<Follows> allRelationships = repository.findAllRelations();
+----
+
+===== Update Relationship
+
+Update by creating a new relationship with the same ID:
+
+[source,java]
+----
+Follows existing = repository.findRelationById("alice_bob").orElseThrow();
+existing.since = 2021;  // Update year
+Follows updated = repository.createRelation(existing.from, existing.to, existing);
+----
+
+===== Delete Relationship
+
+[source,java]
+----
+Follows follows = repository.findRelationById("alice_bob").orElseThrow();
+repository.deleteRelation(follows);
+----
+
+===== Delete Relationships By Source
+
+Delete all relationships from a source node:
+
+[source,java]
+----
+Person alice = repository.findById("Alice").orElseThrow();
+repository.deleteRelationBySource(alice);
+----
+
+==== Querying Relationships
+
+===== Using Template
+
+[source,java]
+----
+List<Follows> follows = template.query(
+    "MATCH (s:Person)-[rel:FOLLOWS]->(t:Person) RETURN s, rel, t",
+    followsReader
+);
+----
+
+===== With Conditions
+
+[source,java]
+----
+List<Follows> recentFollows = template.query(
+    "MATCH (s:Person)-[rel:FOLLOWS]->(t:Person) WHERE rel.since >= $year RETURN s, rel, t",
+    Map.of("year", 2020),
+    followsReader
+);
+----
+
+===== Using Cypher DSL
+
+[source,java]
+----
+import org.neo4j.cypherdsl.core.Cypher;
+import org.neo4j.cypherdsl.core.Node;
+import org.neo4j.cypherdsl.core.Relationship;
+
+Node s = Cypher.node("Person").named("s");
+Node t = Cypher.node("Person").named("t");
+Relationship rel = s.relationshipTo(t, "FOLLOWS").named("rel");
+
+Statement statement = Cypher.match(rel)
+    .where(rel.property("since").gte(Cypher.parameter("year")))
+    .returning(s, t, rel)
+    .build();
+
+List<Follows> follows = template.query(statement, Map.of("year", 2020), followsReader);
+----
+
+===== With Custom Query
+
+[source,java]
+----
+public interface PersonRepository extends NodeRepository<Person, String, Follows, Person> {
+
+    @Query("MATCH (s:Person)-[rel:FOLLOWS]->(t:Person) WHERE s.name = $name RETURN s, rel, t")
+    List<Follows> findFollowsByPerson(@Param("name") String name);
+    
+    @Query("MATCH (s:Person)-[rel:FOLLOWS]->(t:Person) WHERE rel.since >= $year RETURN s, rel, t")
+    List<Follows> findFollowsSinceYear(@Param("year") int year);
+}
+----
+
+==== Relationship Patterns
+
+===== Self-Referencing
+
+A person can follow themselves:
+
+[source,java]
+----
+Person alice = repository.findById("Alice").orElseThrow();
+Follows selfFollow = new Follows("alice_self", alice, alice, 2020);
+repository.createRelation(alice, alice, selfFollow);
+----
+
+===== Multiple Relationship Types
+
+Define separate relationship entities:
+
+[source,java]
+----
+@RelationshipEntity(type = "KNOWS", nodeType = Person.class, sourceField = "from", targetField = "to")
+public class Knows {
+    @Id String id;
+    Person from;
+    Person to;
+    int yearsKnown;
+}
+
+@RelationshipEntity(type = "WORKS_WITH", nodeType = Person.class, sourceField = "from", targetField = "to")
+public class WorksWith {
+    @Id String id;
+    Person from;
+    Person to;
+    String project;
+}
+----
+
+===== Bidirectional Relationships
+
+LadybugDB relationships are directional. For bidirectional relationships:
+
+[source,java]
+----
+// Create both directions
+repository.createRelation(alice, bob, new Follows("alice_bob", alice, bob, 2020));
+repository.createRelation(bob, alice, new Follows("bob_alice", bob, alice, 2020));
+
+// Query both directions
+List<Follows> mutual = template.query(
+    "MATCH (a:Person)-[r1:FOLLOWS]->(b:Person)-[r2:FOLLOWS]->(a) RETURN a, r1, b",
+    followsReader
+);
+----
+
+==== Relationship Properties
+
+Access relationship data through `RelationshipData`:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RelationshipData;
+
+public record RelationshipData(
+    InternalID id,                   // Internal relationship ID
+    String labelName,                // Relationship type
+    InternalID sourceId,             // Source node internal ID
+    InternalID targetId,             // Target node internal ID
+    Map<String, Value> properties    // Custom properties
+) {}
+----
+
+===== Using RelationshipData
+
+[source,java]
+----
+RowMapper<Follows> reader = (row) -> {
+    RelationshipData rel = row.getRelationship("rel");
+    
+    // Internal IDs
+    String relId = rel.id().toString();
+    String sourceId = rel.sourceId().toString();
+    String targetId = rel.targetId().toString();
+    
+    // Relationship type
+    String type = rel.labelName();  // "FOLLOWS"
+    
+    // Properties
+    String name = ValueMappers.asString(rel.properties().get("name"));
+    int since = ValueMappers.asInteger(rel.properties().get("since"));
+    
+    // Connected nodes
+    Map<String, Value> sourceNode = row.getNode("s");
+    Map<String, Value> targetNode = row.getNode("t");
+    
+    // ...
+};
+----
+
+==== Complete Example
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.repository.support.*;
+
+public class RelationshipExample {
+    public static void main(String[] args) {
+        Database database = new Database(":memory:");
+        SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
+        EntityRegistry registry = new EntityRegistry();
+        
+        // Register descriptors
+        registry.registerDescriptor(Person.class, personDescriptor);
+        registry.registerDescriptor(Follows.class, followsDescriptor);
+        
+        LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+        
+        // Create tables
+        template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
+        template.execute("CREATE REL TABLE FOLLOWS(FROM Person TO Person, name STRING PRIMARY KEY, since INT64)");
+        
+        // Create repository
+        SimpleNodeRepository<Person, Follows, String> repo = new SimpleNodeRepository<>(
+            template, Person.class, Follows.class,
+            registry.getDescriptor(Person.class),
+            registry.getDescriptor(Follows.class)
+        );
+        
+        // Create nodes
+        Person alice = repo.save(new Person("Alice", 30));
+        Person bob = repo.save(new Person("Bob", 25));
+        Person charlie = repo.save(new Person("Charlie", 35));
+        
+        // Create relationships
+        repo.createRelation(alice, bob, new Follows("alice_bob", alice, bob, 2020));
+        repo.createRelation(alice, charlie, new Follows("alice_charlie", alice, charlie, 2021));
+        repo.createRelation(bob, charlie, new Follows("bob_charlie", bob, charlie, 2022));
+        
+        // Query relationships
+        List<Follows> aliceFollows = repo.findRelationsBySource(alice);
+        System.out.println("Alice follows " + aliceFollows.size() + " people");
+        
+        List<Follows> allFollows = repo.findAllRelations();
+        System.out.println("Total relationships: " + allFollows.size());
+        
+        // Delete relationship
+        repo.deleteRelation(aliceFollows.get(0));
+        
+        factory.close();
+        database.close();
+    }
+}
+----

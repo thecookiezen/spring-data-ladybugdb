@@ -1,0 +1,57 @@
+=== Transactions
+:rev: {project-version}
+
+Spring Data LadybugDB provides a transaction manager for connection binding, with important limitations due to LadybugDB's architecture.
+
+==== LadybugDBTransactionManager
+
+The transaction manager binds a connection to the current thread:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.transaction.LadybugDBTransactionManager;
+import com.thecookiezen.ladybugdb.spring.connection.PooledConnectionFactory;
+
+@Bean
+public LadybugDBTransactionManager transactionManager(PooledConnectionFactory factory) {
+    return new LadybugDBTransactionManager(factory);
+}
+----
+
+==== Important Limitations
+
+WARNING: LadybugDB auto-commits each command immediately. The transaction manager provides **connection binding only**, not atomic transactions.
+
+===== No Rollback Support
+
+[source,java]
+----
+@Transactional
+public void updatePerson(Person person) {
+    template.execute("SET p.age = 30");  // Immediately committed
+    throw new RuntimeException("Error!"); // Cannot roll back previous operation
+}
+----
+
+===== Single Writer Constraint
+
+LadybugDB allows only one write transaction at a time:
+
+> "At any point in time, there can be multiple read transactions but only one write transaction"
+
+[cols="1,1"]
+|===
+| Transaction Type | Behavior
+
+| Read-only
+| Multiple can run in parallel
+
+| Write
+| Only one at a time, others block
+|===
+
+===== Implications
+
+* Each query **auto-commits immediately**
+* **Rollback is not supported** - once executed, changes are permanent
+* Concurrent write operations will **block** waiting for the write lock

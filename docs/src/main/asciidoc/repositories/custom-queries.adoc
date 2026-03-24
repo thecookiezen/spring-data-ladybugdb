@@ -1,0 +1,80 @@
+=== Custom Queries
+:rev: {project-version}
+
+Define custom queries on repository interfaces using the `@Query` annotation. Spring Data LadybugDB processes these queries at runtime.
+
+==== @Query Annotation
+
+You can use the `@Query` annotation to supply custom Cypher for repository methods:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface PersonRepository extends NodeRepository<Person, String, Void, Person> {
+
+    @Query("MATCH (n:Person) WHERE n.age > $minAge RETURN n")
+    List<Person> findByAgeGreaterThan(@Param("minAge") int minAge);
+    
+    @Query(value = "MATCH (n:Person {name: $name}) DETACH DELETE n", modifying = true)
+    void deleteByName(@Param("name") String name);
+}
+----
+
+===== Annotation Attributes
+
+* **`value`**: The Cypher query string
+* **`modifying`**: Whether the query modifies data (default: `false`)
+* **`loadExtensions`**: Extensions to load before execution (default: empty)
+
+==== Parameter Binding
+
+Always bind parameters with `$paramName` in Cypher and `@Param("paramName")` in your method signature.
+
+[source,java]
+----
+@Query("MATCH (n:Person) WHERE n.name IN $names AND n.age = $age RETURN n")
+List<Person> findByNamesAndAge(@Param("names") List<String> names, @Param("age") int age);
+----
+
+==== Return Types
+
+The template automatically processes the results into common Java types:
+
+* **List / Iterable**: For multi-result sets (`List<Person>`).
+* **Optional / Single Entity**: Returns one instance, or `Optional.empty()`/`null` if not found.
+* **Scalars**: Extract single columns like `List<String>`, `Integer`, or `Long`.
+* **Void**: For `modifying = true` queries.
+
+==== Extension Loading
+
+If your query requires LadybugDB extensions (like `vector`), declare them in the query annotation:
+
+[source,java]
+----
+@Query(
+    value = "MATCH (n:Document) WHERE vector_search(n.embedding, $query, metric := 'cosine') < 0.5 RETURN n",
+    loadExtensions = {"vector"}
+)
+List<Document> findSimilarDocuments(@Param("query") float[] query);
+----
+
+==== Complex Queries and Projections
+
+You can map results to records for custom projections:
+
+[source,java]
+----
+public record PersonSummary(String name, int age) {}
+
+@Query("MATCH (n:Person) RETURN n.name AS name, n.age AS age")
+List<PersonSummary> findAllSummaries();
+----
+
+NOTE: Note that your projections should have matching field names with the returned Cypher aliases.
+
+==== Query Lookup Strategy
+
+Currently, Spring Data LadybugDB lookup heavily relies on explicitly declared queries via `@Query`. Derivation from method names is not fully supported in exactly the same fluent capability as JPA. Always define your Cypher string explicitly.
+

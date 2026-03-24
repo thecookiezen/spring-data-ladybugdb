@@ -1,0 +1,171 @@
+=== Connection Factories
+:rev: {project-version}
+
+Connection factories manage connections to the LadybugDB database. The framework provides two implementations:
+
+==== SimpleConnectionFactory
+
+Creates a new connection for each request and closes it when released. Best for:
+
+* Development and testing
+* Single-threaded applications
+* Low-traffic scenarios
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+
+Database database = new Database(":memory:");
+SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
+
+// Get a connection
+Connection connection = factory.getConnection();
+
+// Use the connection...
+connection.query("MATCH (n) RETURN n");
+
+// Release the connection (closes it)
+factory.releaseConnection(connection);
+
+// Close the factory when done
+factory.close();
+----
+
+==== PooledConnectionFactory
+
+Maintains a pool of connections for efficient reuse. Best for:
+
+* Production applications
+* Multi-threaded environments
+* High-traffic scenarios
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.PooledConnectionFactory;
+
+Database database = new Database("/path/to/database");
+PooledConnectionFactory factory = new PooledConnectionFactory(database);
+
+// Get a connection from the pool
+Connection connection = factory.getConnection();
+
+// Use the connection...
+
+// Return the connection to the pool
+factory.releaseConnection(connection);
+
+// Monitor pool statistics
+int active = factory.getNumActive();  // Currently in use
+int idle = factory.getNumIdle();      // Available in pool
+
+// Close the pool when done
+factory.close();
+----
+
+==== Pool Configuration
+
+Customize pool behavior with `GenericObjectPoolConfig`:
+
+[source,java]
+----
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import java.time.Duration;
+
+GenericObjectPoolConfig<Connection> config = new GenericObjectPoolConfig<>();
+config.setMaxTotal(10);                              // Max connections
+config.setMaxIdle(5);                                // Max idle connections
+config.setMinIdle(2);                                // Min idle connections
+config.setMaxWait(Duration.ofSeconds(30));           // Max wait time
+config.setTestOnBorrow(true);                        // Validate on borrow
+config.setTestOnReturn(false);                       // Validate on return
+config.setTestWhileIdle(true);                       // Validate idle connections
+config.setTimeBetweenEvictionRuns(Duration.ofMinutes(1)); // Eviction check interval
+config.setMinEvictableIdleDuration(Duration.ofMinutes(5)); // Min idle time before eviction
+
+PooledConnectionFactory factory = new PooledConnectionFactory(database, config);
+----
+
+===== Default Configuration
+
+[cols="1,1,2"]
+|===
+| Setting | Default | Description
+
+| `maxTotal`
+| 10
+| Maximum number of connections
+
+| `maxIdle`
+| 5
+| Maximum idle connections in pool
+
+| `minIdle`
+| 2
+| Minimum idle connections maintained
+
+| `maxWait`
+| 30 seconds
+| Maximum wait time when pool is exhausted
+
+| `testOnBorrow`
+| true
+| Validate connections when borrowed
+
+| `testWhileIdle`
+| true
+| Validate idle connections periodically
+
+| `timeBetweenEvictionRuns`
+| 1 minute
+| Interval between eviction runs
+
+| `minEvictableIdleDuration`
+| 5 minutes
+| Minimum idle time before eviction
+|===
+
+==== LadybugDBConnectionFactory Interface
+
+Both implementations implement `LadybugDBConnectionFactory`:
+
+[source,java]
+----
+public interface LadybugDBConnectionFactory {
+    
+    // Get a connection
+    Connection getConnection();
+    
+    // Release a connection back to factory
+    void releaseConnection(Connection connection);
+    
+    // Get the underlying database
+    Database getDatabase();
+    
+    // Close the factory and release resources
+    void close();
+}
+----
+
+==== Resource Management
+
+Always close connections and factories when done:
+
+[source,java]
+----
+try (SimpleConnectionFactory factory = new SimpleConnectionFactory(database)) {
+    LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+    // Use template...
+}
+----
+
+Or with Spring's `@PreDestroy`:
+
+[source,java]
+----
+@Bean(destroyMethod = "close")
+public PooledConnectionFactory connectionFactory(Database database) {
+    return new PooledConnectionFactory(database);
+}
+----

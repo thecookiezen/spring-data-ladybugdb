@@ -1,0 +1,188 @@
+=== Quick Start
+:rev: {project-version}
+
+This guide will get you started with Spring Data LadybugDB in 5 minutes. By the end, you'll be able to:
+
+* Create and configure a connection to LadybugDB
+* Define entity classes with annotations
+* Execute Cypher queries using the template
+* Perform CRUD operations with repositories
+
+The framework follows familiar Spring patterns - if you've used Spring Data JPA or Spring Data Neo4j, you'll feel right at home.
+
+==== Create a Database Instance
+
+First, create a LadybugDB database instance:
+
+[source,java]
+----
+import com.ladybugdb.Database;
+
+Database database = new Database(":memory:");  // In-memory database
+// Or: new Database("/path/to/database");      // Persistent database
+----
+
+==== Create a Connection Factory
+
+For development, use `SimpleConnectionFactory`:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+
+SimpleConnectionFactory connectionFactory = new SimpleConnectionFactory(database);
+----
+
+For production, use `PooledConnectionFactory`:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.connection.PooledConnectionFactory;
+
+PooledConnectionFactory connectionFactory = new PooledConnectionFactory(database);
+----
+
+==== Create the Template
+
+Create a `LadybugDBTemplate` with an `EntityRegistry`:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+
+EntityRegistry registry = new EntityRegistry();
+LadybugDBTemplate template = new LadybugDBTemplate(connectionFactory, registry);
+----
+
+==== Define Your Entity
+
+Create an entity class with the `@NodeEntity` annotation:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.NodeEntity;
+import org.springframework.data.annotation.Id;
+
+@NodeEntity(label = "Person")
+public class Person {
+    @Id
+    private String name;
+    private int age;
+    
+    // constructors, getters, setters
+    public Person() {}
+    
+    public Person(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+    
+    // getters and setters...
+}
+----
+
+==== Register Entity Mappers
+
+Register the entity descriptor with mappers for reading and writing:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.EntityWriter;
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
+import java.util.Map;
+
+RowMapper<Person> reader = (row) -> {
+    var p = row.getNode("n");
+    return new Person(
+        ValueMappers.asString(p.get("name")),
+        ValueMappers.asInteger(p.get("age"))
+    );
+};
+
+EntityWriter<Person> writer = (entity) -> Map.of("age", entity.getAge());
+
+registry.registerDescriptor(Person.class, new EntityDescriptor<>(Person.class, reader, writer));
+----
+
+==== Create the Node Table
+
+Execute DDL to create the node table:
+
+[source,java]
+----
+template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
+----
+
+==== Use the Template
+
+Execute raw Cypher queries:
+
+[source,java]
+----
+// Create a person
+template.execute("CREATE (p:Person {name: $name, age: $age})", 
+    Map.of("name", "Alice", "age", 30));
+
+// Query persons
+List<Person> people = template.query(
+    "MATCH (n:Person) RETURN n",
+    Person.class
+);
+----
+
+==== Use the Repository
+
+Create a repository for CRUD operations:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.repository.support.SimpleNodeRepository;
+
+SimpleNodeRepository<Person, Void, String> repository = new SimpleNodeRepository<>(
+    template, Person.class, Void.class,
+    registry.getDescriptor(Person.class), null
+);
+
+// CRUD operations
+Person saved = repository.save(new Person("Bob", 25));
+Optional<Person> found = repository.findById("Bob");
+repository.deleteById("Bob");
+----
+
+==== Complete Example
+
+The following example consolidates all the steps above into a single runnable class. It demonstrates the complete workflow from database creation to query execution:
+
+[source,java]
+----
+import com.ladybugdb.Database;
+import com.thecookiezen.ladybugdb.spring.connection.SimpleConnectionFactory;
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.repository.support.*;
+
+public class QuickStart {
+    public static void main(String[] args) {
+        Database database = new Database(":memory:");
+        SimpleConnectionFactory factory = new SimpleConnectionFactory(database);
+        EntityRegistry registry = new EntityRegistry();
+        
+        // Register mappers (see step 5)
+        registry.registerDescriptor(Person.class, personDescriptor);
+        
+        LadybugDBTemplate template = new LadybugDBTemplate(factory, registry);
+        
+        template.execute("CREATE NODE TABLE Person(name STRING PRIMARY KEY, age INT64)");
+        
+        template.execute("CREATE (p:Person {name: 'Alice', age: 30})");
+        
+        List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
+        System.out.println("Found " + people.size() + " people");
+        
+        factory.close();
+        database.close();
+    }
+}
+----

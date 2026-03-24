@@ -1,0 +1,95 @@
+=== Entity Mapping
+:rev: {project-version}
+
+Map Java classes to LadybugDB nodes and relationships using annotations. Spring Data LadybugDB provides straightforward annotations to handle graph-to-object mapping.
+
+==== @NodeEntity
+
+Marks a class as a node entity stored in a node table.
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.NodeEntity;
+import org.springframework.data.annotation.Id;
+
+@NodeEntity(label = "Person")
+public class Person {
+    @Id
+    private String name;
+    private int age;
+    
+    // Default constructor is required
+    public Person() {}
+}
+----
+
+===== Attributes
+
+* **`label`**: The node table/label name. Defaults to simple class name (with `Entity` suffix removed if present).
+
+==== @Id
+
+Marks the primary key field for the entity.
+
+IMPORTANT: LadybugDB node tables require a primary key. The `@Id` field must match the table's primary key definition.
+
+===== Supported ID Types
+
+* `String` -> `STRING PRIMARY KEY`
+* `Integer` / `Long` -> `INT64 PRIMARY KEY`
+
+==== @RelationshipEntity
+
+Marks a class as a relationship entity connecting two nodes.
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.RelationshipEntity;
+import org.springframework.data.annotation.Id;
+
+@RelationshipEntity(
+    type = "KNOWS",
+    nodeType = Person.class,
+    sourceField = "from",
+    targetField = "to"
+)
+public class Knows {
+    @Id
+    private String id;
+    private Person from;
+    private Person to;
+    private int since;
+    
+    public Knows() {}
+}
+----
+
+===== Attributes
+
+* **`type`**: The relationship type name (e.g., "KNOWS", "FOLLOWS").
+* **`nodeType`**: The node entity class for both source and target.
+* **`sourceField`**: Field name holding the source node.
+* **`targetField`**: Field name holding the target node.
+
+===== Relationship Requirements
+
+* Source and target must be the exact same node type.
+* The `@Id` field stores the relationship's primary key.
+* `sourceField` and `targetField` reference node entity fields.
+
+==== Supported Properties
+
+LadybugDB easily maps primitive Java types to standard graph properties:
+
+* **Strings**: `String` -> `STRING`
+* **Numerics**: `int`/`Integer`, `long`/`Long` -> `INT64`, `double`/`Double` -> `DOUBLE`, `float[]` -> `FLOAT[]`
+* **Booleans**: `boolean`/`Boolean` -> `BOOLEAN`
+* **Collections**: Standard `List<T>` types automatically map to their graph List representations (e.g. `List<String>` -> `STRING[]`).
+
+==== Entity Descriptors and Registry
+
+To persist these entities, LadybugDB needs to know how to read from a `QueryRow` and write into graph properties. 
+
+If you are using Spring Boot, component scanning automatically builds and registers the necessary metadata descriptors (like `EntityDescriptor`, `NodeMetadata`, and `RelationshipMetadata`) onto the `EntityRegistry`.
+
+If you are using LadybugDB programmatically (without Spring Boot DI), you must manually build and register `EntityDescriptor<T>` objects onto the `EntityRegistry` before creating your `SimpleNodeRepository`.

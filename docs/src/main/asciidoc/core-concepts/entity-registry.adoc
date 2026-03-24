@@ -1,0 +1,298 @@
+=== Entity Registry
+:rev: {project-version}
+
+The `EntityRegistry` manages entity descriptors that define how to read and write entities to/from the database.
+
+==== EntityDescriptor
+
+An `EntityDescriptor<T>` combines a `RowMapper` for reading and an `EntityWriter` for writing:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.EntityWriter;
+
+public record EntityDescriptor<T>(
+    Class<T> entityType,
+    RowMapper<T> reader,
+    EntityWriter<T> writer
+) {}
+----
+
+==== Registering Descriptors
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.EntityWriter;
+import java.util.Map;
+
+EntityRegistry registry = new EntityRegistry();
+
+// Create reader (RowMapper)
+RowMapper<Person> reader = (row) -> {
+    var node = row.getNode("n");
+    return new Person(
+        ValueMappers.asString(node.get("name")),
+        ValueMappers.asInteger(node.get("age"))
+    );
+};
+
+// Create writer (EntityWriter)
+EntityWriter<Person> writer = (entity) -> Map.of(
+    "age", entity.getAge()
+    // Note: ID is handled separately
+);
+
+// Register the descriptor
+registry.registerDescriptor(Person.class, new EntityDescriptor<>(Person.class, reader, writer));
+----
+
+==== Using Registered Descriptors
+
+===== With LadybugDBTemplate
+
+Once registered, use the entity class directly:
+
+[source,java]
+----
+// Query using registered mapper
+List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
+
+// Query for single result
+Optional<Person> person = template.queryForObject(
+    "MATCH (n:Person) WHERE n.name = $name RETURN n",
+    Map.of("name", "Alice"),
+    Person.class
+);
+----
+
+===== With SimpleNodeRepository
+
+Pass the descriptor to the repository constructor:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.repository.support.SimpleNodeRepository;
+
+SimpleNodeRepository<Person, Void, String> repository = new SimpleNodeRepository<>(
+    template,
+    Person.class,
+    Void.class,
+    registry.getDescriptor(Person.class),
+    null  // No relationship descriptor
+);
+----
+
+==== RowMapper Interface
+
+The `RowMapper<T>` functional interface maps a `QueryRow` to an entity:
+
+[source,java]
+----
+@FunctionalInterface
+public interface RowMapper<T> {
+    T mapRow(QueryRow row) throws Exception;
+}
+----
+
+===== Mapping Nodes
+
+[source,java]
+----
+RowMapper<Person> personMapper = (row) -> {
+    // Get node properties
+    Map<String, Value> node = row.getNode("n");
+    
+    String name = ValueMappers.asString(node.get("name"));
+    Integer age = ValueMappers.asInteger(node.get("age"));
+    
+    return new Person(name, age);
+};
+----
+
+===== Mapping Relationships
+
+[source,java]
+----
+RowMapper<Follows> followsMapper = (row) -> {
+    // Get relationship data
+    RelationshipData rel = row.getRelationship("rel");
+    String id = rel.id().toString();
+    int since = ValueMappers.asInteger(rel.properties().get("since"));
+    
+    // Get connected nodes
+    Map<String, Value> sourceNode = row.getNode("s");
+    Map<String, Value> targetNode = row.getNode("t");
+    
+    Person from = new Person(
+        ValueMappers.asString(sourceNode.get("name")),
+        ValueMappers.asInteger(sourceNode.get("age"))
+    );
+    
+    Person to = new Person(
+        ValueMappers.asString(targetNode.get("name")),
+        ValueMappers.asInteger(targetNode.get("age"))
+    );
+    
+    return new Follows(id, from, to, since);
+};
+----
+
+==== EntityWriter Interface
+
+The `EntityWriter<T>` functional interface decomposes an entity into a property map:
+
+[source,java]
+----
+@FunctionalInterface
+public interface EntityWriter<T> {
+    Map<String, Object> decompose(T entity);
+}
+----
+
+NOTE: The ID property is handled separately by the repository and should not be included in the writer output.
+
+===== Simple Writer
+
+[source,java]
+----
+EntityWriter<Person> personWriter = (entity) -> Map.of(
+    "age", entity.getAge()
+);
+----
+
+===== Writer with Multiple Properties
+
+[source,java]
+----
+EntityWriter<Document> documentWriter = (entity) -> {
+    Map<String, Object> props = new HashMap<>();
+    props.put("title", entity.getTitle());
+    props.put("content", entity.getContent());
+    props.put("createdAt", entity.getCreatedAt().toEpochMilli());
+    props.put("tags", entity.getTags());
+    props.put("embedding", entity.getEmbedment());  // float[]
+    return props;
+};
+----
+
+==== QueryRow Interface
+
+The `QueryRow` provides access to row data:
+
+[source,java]
+----
+public interface QueryRow {
+    // Get value by column name
+    Value getValue(String column);
+    
+    // Get value by column index
+    Value getValue(int index);
+    
+    // Check if column exists
+    boolean containsKey(String column);
+    
+    // Check value type
+    boolean isNode(String column);
+    boolean isRelationship(String column);
+    
+    // Get structured data
+    Map<String, Value> getNode(String column);
+    RelationshipData getRelationship(String column);
+    
+    // Get all column names
+    Set<String> keySet();
+}
+----
+
+==== Registering Multiple Entities
+
+[source,java]
+----
+EntityRegistry registry = new EntityRegistry();
+
+registry.registerDescriptor(Person.class, personDescriptor);
+registry.registerDescriptor(Company.class, companyDescriptor);
+registry.registerDescriptor(Follows.class, followsDescriptor);
+registry.registerDescriptor(WorksAt.class, worksAtDescriptor);
+
+// Retrieve descriptors
+EntityDescriptor<Person> personDesc = registry.getDescriptor(Person.class);
+----
+
+==== Error Handling
+
+Attempting to query with an unregistered entity class:
+
+[source,java]
+----
+try {
+    List<Unregistered> results = template.query("MATCH (n) RETURN n", Unregistered.class);
+} catch (IllegalArgumentException e) {
+    // "No entity descriptor registered for com.example.Unregistered"
+}
+----
+
+==== Best Practices
+
+===== Column Naming
+
+Use consistent column names in your queries and mappers:
+
+[source,java]
+----
+// Query uses "n" for node
+template.query("MATCH (n:Person) RETURN n", Person.class);
+
+// Mapper expects "n"
+RowMapper<Person> mapper = (row) -> {
+    var node = row.getNode("n");  // Must match query
+    // ...
+};
+----
+
+===== Null Safety
+
+Handle null values in mappers:
+
+[source,java]
+----
+RowMapper<Document> mapper = (row) -> {
+    var node = row.getNode("n");
+    
+    String title = ValueMappers.asString(node.get("title"));  // Returns null if missing
+    Integer views = ValueMappers.asInteger(node.get("views")); // Returns null if missing
+    
+    return new Document(
+        title,
+        views != null ? views : 0  // Default value
+    );
+};
+----
+
+===== Complex Types
+
+Use `ValueMappers` for collections and arrays:
+
+[source,java]
+----
+EntityWriter<Document> writer = (entity) -> {
+    Map<String, Object> props = new HashMap<>();
+    props.put("tags", entity.getTags());           // List<String>
+    props.put("scores", entity.getScores());       // List<Integer>
+    props.put("embedding", entity.getEmbedment()); // float[]
+    return props;
+};
+
+RowMapper<Document> reader = (row) -> {
+    var node = row.getNode("n");
+    return new Document(
+        ValueMappers.asString(node.get("title")),
+        ValueMappers.asStringList(node.get("tags")),
+        ValueMappers.asFloatArray(node.get("embedding"))
+    );
+};
+----

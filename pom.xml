@@ -15,6 +15,7 @@
     <modules>
         <module>core</module>
         <module>jmh</module>
+        <module>docs</module>
     </modules>
 
     <properties>

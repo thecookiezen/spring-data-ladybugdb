@@ -1,0 +1,16 @@
+[[architecture]]
+=== Architecture
+
+The framework consists of several core components:
+
+[diagram, target=architecture, format=svg]
+....
++------------------+     +--------------------+     +-------------------+
+|   Application    | --> | LadybugDBTemplate  | --> | ConnectionFactory |
++------------------+     +--------------------+     +-------------------+
+         |                       |                          |
+         v                       v                          v
++------------------+     +--------------------+     +-------------------+
+|   Repositories   |     |   EntityRegistry   |     |    Database       |
++------------------+     +--------------------+     +-------------------+
+....

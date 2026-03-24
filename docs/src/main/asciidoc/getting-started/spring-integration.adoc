@@ -1,0 +1,195 @@
+=== Spring Integration
+:rev: {project-version}
+
+Spring Data LadybugDB integrates seamlessly with Spring Framework through annotation-based configuration.
+
+==== Enable LadybugDB Repositories
+
+Use the `@EnableLadybugDBRepositories` annotation to enable automatic repository detection:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.config.EnableLadybugDBRepositories;
+import com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate;
+import com.thecookiezen.ladybugdb.spring.connection.LadybugDBConnectionFactory;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+import com.thecookiezen.ladybugdb.spring.transaction.LadybugDBTransactionManager;
+import org.springframework.context.annotation.*;
+
+@Configuration
+@EnableLadybugDBRepositories(basePackages = "com.example.repositories")
+public class LadybugDBConfig {
+
+    @Bean
+    public Database database() {
+        return new Database("/path/to/database");
+    }
+
+    @Bean
+    public LadybugDBConnectionFactory connectionFactory(Database database) {
+        return new PooledConnectionFactory(database);
+    }
+
+    @Bean
+    public EntityRegistry entityRegistry() {
+        EntityRegistry registry = new EntityRegistry();
+        // Register entity descriptors
+        return registry;
+    }
+
+    @Bean
+    public LadybugDBTemplate ladybugDBTemplate(
+            LadybugDBConnectionFactory connectionFactory, 
+            EntityRegistry entityRegistry) {
+        return new LadybugDBTemplate(connectionFactory, entityRegistry);
+    }
+
+    @Bean
+    public LadybugDBTransactionManager transactionManager(
+            LadybugDBConnectionFactory connectionFactory) {
+        return new LadybugDBTransactionManager(connectionFactory);
+    }
+}
+----
+
+==== Repository Interface
+
+Define your repository interface extending `NodeRepository`:
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.annotation.NodeEntity;
+import com.thecookiezen.ladybugdb.spring.annotation.Query;
+import com.thecookiezen.ladybugdb.spring.repository.NodeRepository;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
+import java.util.Optional;
+
+@NodeEntity(label = "Person")
+public class Person {
+    @Id
+    private String name;
+    private int age;
+    // constructors, getters, setters
+}
+
+public interface PersonRepository extends NodeRepository<Person, String, Void, Person> {
+
+    @Query("MATCH (n:Person) WHERE n.age > $minAge RETURN n")
+    List<Person> findByAgeGreaterThan(@Param("minAge") int minAge);
+
+    @Query("MATCH (n:Person) WHERE n.name = $name RETURN n")
+    Optional<Person> findByName(@Param("name") String name);
+}
+----
+
+==== Using Repositories
+
+Inject repositories into your services:
+
+[source,java]
+----
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class PersonService {
+
+    private final PersonRepository repository;
+
+    public PersonService(PersonRepository repository) {
+        this.repository = repository;
+    }
+
+    @Transactional
+    public Person createPerson(String name, int age) {
+        return repository.save(new Person(name, age));
+    }
+
+    public Optional<Person> findPerson(String name) {
+        return repository.findById(name);
+    }
+
+    public List<Person> findAdults() {
+        return repository.findByAgeGreaterThan(17);
+    }
+
+    @Transactional
+    public void deletePerson(String name) {
+        repository.deleteById(name);
+    }
+}
+----
+
+==== @EnableLadybugDBRepositories Attributes
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| `basePackages`
+| Packages to scan for repository interfaces
+
+| `basePackageClasses`
+| Type-safe alternative to `basePackages`
+
+| `ladybugDBTemplateRef`
+| Name of the `LadybugDBTemplate` bean (default: `"ladybugDBTemplate"`)
+
+| `repositoryImplementationPostfix`
+| Postfix for custom repository implementations (default: `"Impl"`)
+
+| `queryLookupStrategy`
+| Strategy for query creation (default: `CREATE_IF_NOT_FOUND`)
+|===
+
+==== Transaction Management
+
+The `LadybugDBTransactionManager` binds a connection to the current thread for the transaction duration:
+
+[source,java]
+----
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class PersonService {
+
+    @Transactional
+    public void updateMultiplePersons(List<Person> persons) {
+        // All operations use the same connection
+        for (Person p : persons) {
+            repository.save(p);
+        }
+    }
+}
+----
+
+WARNING: LadybugDB auto-commits each command. The transaction manager provides connection binding only, not atomic transactions. See <<transactions>> for details.
+
+==== Connection Pool Configuration
+
+Configure the connection pool with custom settings:
+
+[source,java]
+----
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import java.time.Duration;
+
+@Bean
+public LadybugDBConnectionFactory connectionFactory(Database database) {
+    GenericObjectPoolConfig<Connection> config = new GenericObjectPoolConfig<>();
+    config.setMaxTotal(20);
+    config.setMaxIdle(10);
+    config.setMinIdle(5);
+    config.setMaxWait(Duration.ofSeconds(60));
+    config.setTestOnBorrow(true);
+    config.setTestWhileIdle(true);
+    config.setTimeBetweenEvictionRuns(Duration.ofMinutes(2));
+    config.setMinEvictableIdleDuration(Duration.ofMinutes(10));
+    
+    return new PooledConnectionFactory(database, config);
+}
+----

@@ -1,0 +1,336 @@
+=== Row Mappers
+:rev: {project-version}
+
+Row mappers convert query result rows to domain objects.
+
+==== RowMapper Interface
+
+[source,java]
+----
+@FunctionalInterface
+public interface RowMapper<T> {
+    T mapRow(QueryRow row) throws Exception;
+}
+----
+
+==== QueryRow Interface
+
+The `QueryRow` provides access to row data:
+
+[source,java]
+----
+public interface QueryRow {
+    // Access by column name
+    Value getValue(String column);
+    Value getValue(int index);
+    
+    // Type checking
+    boolean containsKey(String column);
+    boolean isNode(String column);
+    boolean isRelationship(String column);
+    
+    // Structured access
+    Map<String, Value> getNode(String column);
+    RelationshipData getRelationship(String column);
+    
+    // Column names
+    Set<String> keySet();
+}
+----
+
+==== Basic Mapping
+
+===== Scalar Values
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+
+RowMapper<String> nameMapper = (row) -> 
+    ValueMappers.asString(row.getValue("name"));
+
+RowMapper<Integer> ageMapper = (row) -> 
+    ValueMappers.asInteger(row.getValue("age"));
+
+RowMapper<Long> countMapper = (row) -> 
+    ValueMappers.asLong(row.getValue("count"));
+----
+
+===== Mapping Entities
+
+[source,java]
+----
+RowMapper<Person> personMapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    return new Person(
+        ValueMappers.asString(node.get("name")),
+        ValueMappers.asInteger(node.get("age"))
+    );
+};
+
+List<Person> people = template.query(
+    "MATCH (n:Person) RETURN n",
+    personMapper
+);
+----
+
+===== Multiple Columns
+
+[source,java]
+----
+RowMapper<PersonDto> mapper = (row) -> {
+    return new PersonDto(
+        ValueMappers.asString(row.getValue("name")),
+        ValueMappers.asInteger(row.getValue("age")),
+        ValueMappers.asString(row.getValue("city"))
+    );
+};
+
+List<PersonDto> results = template.query(
+    "MATCH (n:Person) RETURN n.name AS name, n.age AS age, n.city AS city",
+    mapper
+);
+----
+
+==== Mapping Relationships
+
+===== RelationshipData
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RelationshipData;
+
+public record RelationshipData(
+    InternalID id,           // Internal relationship ID
+    String labelName,        // Relationship type (e.g., "KNOWS")
+    InternalID sourceId,     // Source node ID
+    InternalID targetId,     // Target node ID
+    Map<String, Value> properties  // Custom properties
+) {}
+----
+
+===== Mapping Relationship Entities
+
+[source,java]
+----
+@RelationshipEntity(type = "FOLLOWS", nodeType = Person.class, sourceField = "from", targetField = "to")
+public class Follows {
+    @Id
+    String name;
+    Person from;
+    Person to;
+    int since;
+}
+
+RowMapper<Follows> followsMapper = (row) -> {
+    // Get relationship data
+    RelationshipData rel = row.getRelationship("rel");
+    String name = ValueMappers.asString(rel.properties().get("name"));
+    int since = ValueMappers.asInteger(rel.properties().get("since"));
+    
+    // Get connected nodes
+    Map<String, Value> sourceNode = row.getNode("s");
+    Map<String, Value> targetNode = row.getNode("t");
+    
+    Person from = new Person(
+        ValueMappers.asString(sourceNode.get("name")),
+        ValueMappers.asInteger(sourceNode.get("age"))
+    );
+    
+    Person to = new Person(
+        ValueMappers.asString(targetNode.get("name")),
+        ValueMappers.asInteger(targetNode.get("age"))
+    );
+    
+    return new Follows(name, from, to, since);
+};
+
+List<Follows> follows = template.query(
+    "MATCH (s:Person)-[rel:FOLLOWS]->(t:Person) RETURN s, rel, t",
+    followsMapper
+);
+----
+
+===== Relationship with Multiple Types
+
+[source,java]
+----
+RowMapper<Connection> connectionMapper = (row) -> {
+    RelationshipData rel = row.getRelationship("r");
+    String type = rel.labelName();  // "KNOWS", "WORKS_WITH", etc.
+    
+    Map<String, Value> source = row.getNode("a");
+    Map<String, Value> target = row.getNode("b");
+    
+    return new Connection(
+        type,
+        ValueMappers.asString(source.get("name")),
+        ValueMappers.asString(target.get("name"))
+    );
+};
+----
+
+==== Complex Mappings
+
+===== Nested Objects
+
+[source,java]
+----
+RowMapper<PersonWithCity> mapper = (row) -> {
+    Map<String, Value> personNode = row.getNode("p");
+    Map<String, Value> cityNode = row.getNode("c");
+    
+    City city = new City(
+        ValueMappers.asString(cityNode.get("name")),
+        ValueMappers.asString(cityNode.get("country"))
+    );
+    
+    return new PersonWithCity(
+        ValueMappers.asString(personNode.get("name")),
+        ValueMappers.asInteger(personNode.get("age")),
+        city
+    );
+};
+
+List<PersonWithCity> results = template.query(
+    "MATCH (p:Person)-[:LIVES_IN]->(c:City) RETURN p, c",
+    mapper
+);
+----
+
+===== Lists and Arrays
+
+[source,java]
+----
+RowMapper<Document> documentMapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    return new Document(
+        ValueMappers.asString(node.get("id")),
+        ValueMappers.asString(node.get("title")),
+        ValueMappers.asStringList(node.get("tags")),
+        ValueMappers.asFloatArray(node.get("embedding"))
+    );
+};
+----
+
+===== Null Handling
+
+[source,java]
+----
+RowMapper<Person> safeMapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    String name = ValueMappers.asString(node.get("name"));
+    Integer age = ValueMappers.asInteger(node.get("age"));
+    String city = ValueMappers.asString(node.get("city"));
+    
+    return new Person(
+        name,
+        age != null ? age : 0,        // Default value
+        city != null ? city : "Unknown"  // Default value
+    );
+};
+----
+
+===== Optional Relationships
+
+[source,java]
+----
+RowMapper<PersonWithOptionalCity> mapper = (row) -> {
+    Map<String, Value> personNode = row.getNode("p");
+    Map<String, Value> cityNode = row.getNode("c");  // May be null
+    
+    City city = null;
+    if (cityNode != null && !cityNode.isEmpty()) {
+        city = new City(
+            ValueMappers.asString(cityNode.get("name")),
+            ValueMappers.asString(cityNode.get("country"))
+        );
+    }
+    
+    return new PersonWithOptionalCity(
+        ValueMappers.asString(personNode.get("name")),
+        Optional.ofNullable(city)
+    );
+};
+
+List<PersonWithOptionalCity> results = template.query(
+    "MATCH (p:Person) OPTIONAL MATCH (p)-[:LIVES_IN]->(c:City) RETURN p, c",
+    mapper
+);
+----
+
+==== Type Checking
+
+Use `isNode()` and `isRelationship()` for type-safe access:
+
+[source,java]
+----
+RowMapper<Object> dynamicMapper = (row) -> {
+    if (row.isNode("result")) {
+        Map<String, Value> node = row.getNode("result");
+        return "Node: " + ValueMappers.asString(node.get("name"));
+    } else if (row.isRelationship("result")) {
+        RelationshipData rel = row.getRelationship("result");
+        return "Relationship: " + rel.labelName();
+    } else {
+        return "Value: " + row.getValue("result").getValue();
+    }
+};
+----
+
+==== Registering with EntityRegistry
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
+import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+
+EntityRegistry registry = new EntityRegistry();
+
+RowMapper<Person> reader = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    return new Person(
+        ValueMappers.asString(node.get("name")),
+        ValueMappers.asInteger(node.get("age"))
+    );
+};
+
+EntityWriter<Person> writer = (entity) -> Map.of("age", entity.getAge());
+
+registry.registerDescriptor(Person.class, new EntityDescriptor<>(Person.class, reader, writer));
+
+// Now use with template
+List<Person> people = template.query("MATCH (n:Person) RETURN n", Person.class);
+----
+
+==== Error Handling
+
+[source,java]
+----
+RowMapper<Person> safeMapper = (row) -> {
+    try {
+        Map<String, Value> node = row.getNode("n");
+        return new Person(
+            ValueMappers.asString(node.get("name")),
+            ValueMappers.asInteger(node.get("age"))
+        );
+    } catch (Exception e) {
+        throw new RuntimeException("Failed to map Person row", e);
+    }
+};
+----
+
+The template wraps mapping exceptions in `CypherMappingException`:
+
+[source,java]
+----
+try {
+    List<Person> people = template.query("MATCH (n) RETURN n", Person.class);
+} catch (LadybugDBTemplate.CypherMappingException e) {
+    logger.error("Mapping failed", e.getCause());
+}
+----

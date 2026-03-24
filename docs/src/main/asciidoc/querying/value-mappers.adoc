@@ -1,0 +1,365 @@
+=== Value Mappers
+:rev: {project-version}
+
+`ValueMappers` is a utility class for converting LadybugDB `Value` objects to Java types.
+
+==== Overview
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import com.ladybugdb.Value;
+----
+
+==== Scalar Types
+
+===== asString
+
+[source,java]
+----
+public static String asString(Value value)
+----
+
+Converts a Value to String. Returns `null` for null values.
+
+[source,java]
+----
+String name = ValueMappers.asString(value);
+----
+
+===== asInteger
+
+[source,java]
+----
+public static Integer asInteger(Value value)
+----
+
+Converts a Value to Integer. Handles `Number` types directly.
+
+[source,java]
+----
+Integer age = ValueMappers.asInteger(node.get("age"));
+int primitiveAge = ValueMappers.asInteger(node.get("age"));  // Auto-unboxing
+----
+
+===== asLong
+
+[source,java]
+----
+public static Long asLong(Value value)
+----
+
+[source,java]
+----
+Long timestamp = ValueMappers.asLong(node.get("createdAt"));
+----
+
+===== asDouble
+
+[source,java]
+----
+public static Double asDouble(Value value)
+----
+
+[source,java]
+----
+Double score = ValueMappers.asDouble(node.get("score"));
+----
+
+===== asBoolean
+
+[source,java]
+----
+public static Boolean asBoolean(Value value)
+----
+
+[source,java]
+----
+Boolean active = ValueMappers.asBoolean(node.get("active"));
+----
+
+==== List Types
+
+===== asList
+
+Generic list mapping with element mapper:
+
+[source,java]
+----
+public static <T> List<T> asList(Value value, Function<Value, T> elementMapper)
+----
+
+[source,java]
+----
+List<Double> scores = ValueMappers.asList(value, ValueMappers::asDouble);
+
+List<Person> people = ValueMappers.asList(value, v -> {
+    // Custom element mapping
+    return new Person(ValueMappers.asString(v));
+});
+----
+
+===== asStringList
+
+[source,java]
+----
+public static List<String> asStringList(Value value)
+----
+
+[source,java]
+----
+List<String> tags = ValueMappers.asStringList(node.get("tags"));
+----
+
+===== asIntegerList
+
+[source,java]
+----
+public static List<Integer> asIntegerList(Value value)
+----
+
+[source,java]
+----
+List<Integer> years = ValueMappers.asIntegerList(node.get("years"));
+----
+
+===== asLongList
+
+[source,java]
+----
+public static List<Long> asLongList(Value value)
+----
+
+===== asDoubleList
+
+[source,java]
+----
+public static List<Double> asDoubleList(Value value)
+----
+
+===== asBooleanList
+
+[source,java]
+----
+public static List<Boolean> asBooleanList(Value value)
+----
+
+==== Array Types
+
+===== asFloatArray
+
+[source,java]
+----
+public static float[] asFloatArray(Value value)
+----
+
+Returns `null` for null values. Useful for vector embeddings.
+
+[source,java]
+----
+float[] embedding = ValueMappers.asFloatArray(node.get("embedding"));
+
+if (embedding != null) {
+    System.out.println("Embedding dimension: " + embedding.length);
+}
+----
+
+==== Null Safety
+
+All mappers handle null gracefully:
+
+[source,java]
+----
+Value nullValue = null;
+String result = ValueMappers.asString(nullValue);  // Returns null
+
+Value nodeValue = node.get("nonexistent");
+Integer age = ValueMappers.asInteger(nodeValue);   // Returns null
+----
+
+===== Default Values
+
+Handle nulls with defaults:
+
+[source,java]
+----
+Integer age = ValueMappers.asInteger(node.get("age"));
+int safeAge = age != null ? age : 0;
+
+// Or with Optional
+int safeAge = Optional.ofNullable(ValueMappers.asInteger(node.get("age")))
+    .orElse(0);
+----
+
+==== Usage in RowMappers
+
+===== Node Properties
+
+[source,java]
+----
+RowMapper<Person> mapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    return new Person(
+        ValueMappers.asString(node.get("name")),
+        ValueMappers.asInteger(node.get("age")),
+        ValueMappers.asBoolean(node.get("active")),
+        ValueMappers.asDouble(node.get("score"))
+    );
+};
+----
+
+===== Direct Column Values
+
+[source,java]
+----
+RowMapper<String> nameMapper = (row) -> 
+    ValueMappers.asString(row.getValue("name"));
+
+RowMapper<Long> countMapper = (row) -> 
+    ValueMappers.asLong(row.getValue("count"));
+----
+
+===== Collections
+
+[source,java]
+----
+RowMapper<Document> mapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    return new Document(
+        ValueMappers.asString(node.get("id")),
+        ValueMappers.asStringList(node.get("tags")),
+        ValueMappers.asFloatArray(node.get("embedding"))
+    );
+};
+----
+
+===== Nested Lists
+
+[source,java]
+----
+RowMapper<Matrix> mapper = (row) -> {
+    Value matrixValue = row.getValue("matrix");
+    
+    List<List<Double>> matrix = ValueMappers.asList(matrixValue, 
+        innerValue -> ValueMappers.asDoubleList(innerValue)
+    );
+    
+    return new Matrix(matrix);
+};
+----
+
+==== Usage in EntityWriters
+
+The template converts Java types to Values automatically. Common patterns:
+
+[source,java]
+----
+EntityWriter<Document> writer = (entity) -> {
+    Map<String, Object> props = new HashMap<>();
+    props.put("title", entity.getTitle());           // String
+    props.put("views", entity.getViews());           // Integer
+    props.put("score", entity.getScore());           // Double
+    props.put("active", entity.isActive());          // Boolean
+    props.put("tags", entity.getTags());             // List<String>
+    props.put("embedding", entity.getEmbedment());   // float[]
+    return props;
+};
+----
+
+==== Type Conversion Table
+
+[cols="1,1,1"]
+|===
+| Java Type | Mapper Method | LadybugDB Type
+
+| `String`
+| `asString()`
+| STRING
+
+| `Integer`
+| `asInteger()`
+| INT64
+
+| `Long`
+| `asLong()`
+| INT64
+
+| `Double`
+| `asDouble()`
+| DOUBLE
+
+| `Boolean`
+| `asBoolean()`
+| BOOLEAN
+
+| `List<String>`
+| `asStringList()`
+| LIST
+
+| `List<Integer>`
+| `asIntegerList()`
+| LIST
+
+| `List<Double>`
+| `asDoubleList()`
+| LIST
+
+| `float[]`
+| `asFloatArray()`
+| LIST
+
+| `List<T>`
+| `asList(mapper)`
+| LIST
+|===
+
+==== Performance Notes
+
+* Direct `Value.getValue()` is used internally for optimal performance
+* No intermediate string conversion for numeric types
+* List operations allocate new collections (not cached)
+
+==== Complete Example
+
+[source,java]
+----
+import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
+import com.thecookiezen.ladybugdb.spring.mapper.ValueMappers;
+import java.util.List;
+import java.util.Map;
+
+public class Document {
+    private String id;
+    private String title;
+    private String content;
+    private List<String> tags;
+    private float[] embedding;
+    private int viewCount;
+    private double relevanceScore;
+    private boolean published;
+    
+    // constructors, getters...
+}
+
+RowMapper<Document> documentMapper = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    
+    return new Document(
+        ValueMappers.asString(node.get("id")),
+        ValueMappers.asString(node.get("title")),
+        ValueMappers.asString(node.get("content")),
+        ValueMappers.asStringList(node.get("tags")),
+        ValueMappers.asFloatArray(node.get("embedding")),
+        ValueMappers.asInteger(node.get("viewCount")),
+        ValueMappers.asDouble(node.get("relevanceScore")),
+        ValueMappers.asBoolean(node.get("published"))
+    );
+};
+
+List<Document> docs = template.query(
+    "MATCH (n:Document) WHERE n.published = true RETURN n",
+    documentMapper
+);
+----

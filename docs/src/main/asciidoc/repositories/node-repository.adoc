@@ -1,0 +1,74 @@
+=== Node Repository
+:rev: {project-version}
+
+`SimpleNodeRepository` provides CRUD operations for node entities, extending the standard Spring Data `CrudRepository`.
+
+==== NodeRepository Interface
+
+Your custom repository will typically extend `NodeRepository`, which gives you out-of-the-box CRUD and relationship management:
+
+[source,java]
+----
+import org.springframework.data.repository.CrudRepository;
+
+@NoRepositoryBean
+public interface NodeRepository<T, ID, R, S> extends CrudRepository<T, ID> {
+    
+    // Relationship operations
+    R createRelation(S source, T target, R relationship);
+    List<R> findRelationsBySource(S source);
+    List<R> findAllRelations();
+    void deleteRelation(R relationship);
+    void deleteRelationBySource(T source);
+    Optional<R> findRelationById(ID id);
+}
+----
+
+==== CRUD Operations
+
+Since `NodeRepository` extends `CrudRepository`, all standard standard operations are supported seamlessly without writing boilerplate:
+
+* **`save(entity)` / `saveAll(entities)`:** Inserts or updates entities using Cypher `MERGE`.
+* **`findById(id)` / `findAll()`:** Retrieves entities mapping their graph properties to your Java object.
+* **`count()` / `existsById(id)`:** Lightweight aggregations to check entity presence.
+* **`delete(entity)` / `deleteById(id)` / `deleteAll(...)`:** Uses `DETACH DELETE` to safely remove nodes and their relationships.
+
+==== Relationship Operations
+
+In addition to CRUD, `NodeRepository` can handle custom relationship creation and retrieval. See <<relationships>> for detailed documentation on entity relationships.
+
+[source,java]
+----
+Person alice = repository.findById("Alice").orElseThrow();
+Person bob = repository.findById("Bob").orElseThrow();
+
+// Create a relationship
+Follows mappedFollows = new Follows("alice_bob", alice, bob, 2020);
+repository.createRelation(alice, bob, mappedFollows);
+
+// Query relationships
+List<Follows> relationsFromAlice = repository.findRelationsBySource(alice);
+----
+
+==== Entity Requirements and Registration
+
+To properly manage an entity, it must:
+1. Be annotated with `@NodeEntity` (label defaults to class name).
+2. Have an `@Id` field mapped to the graph node's primary key.
+3. Define a no-argument constructor for instantiation.
+
+If using LadybugDB programmatically outside of Spring's component scan, you must register its `EntityDescriptor` with the `EntityRegistry`, providing a `RowMapper` and `EntityWriter`.
+
+[source,java]
+----
+EntityRegistry registry = new EntityRegistry();
+registry.registerDescriptor(Person.class, 
+    new EntityDescriptor<>(Person.class, personReader, personWriter));
+
+SimpleNodeRepository<Person, Void, String> repo = new SimpleNodeRepository<>(
+    template, Person.class, Void.class,
+    registry.getDescriptor(Person.class), null
+);
+----
+
+When using `@EnableLadybugDBRepositories` in a standard Spring context, this registration is handled automatically based on your `@NodeEntity` classes.

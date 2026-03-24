@@ -1,0 +1,10 @@
+[[dependencies]]
+=== Dependencies
+
+The framework requires:
+
+* Java 21+
+* Spring Framework 6.x
+* LadybugDB Native Library (`com.ladybugdb:lbug`)
+* Neo4j Cypher DSL (`org.neo4j:neo4j-cypher-dsl`)
+* Apache Commons Pool2 (`org.apache.commons:commons-pool2`)
