@@ -29,7 +29,17 @@ public class PooledConnectionFactory implements LadybugDBConnectionFactory {
      * @param database the LadybugDB database instance
      */
     public PooledConnectionFactory(Database database) {
-        this(database, createDefaultPoolConfig());
+        this(database, null, createDefaultPoolConfig());
+    }
+
+    /**
+     * Creates a pooled connection factory with custom pool configuration.
+     *
+     * @param database      the LadybugDB database instance
+     * @param homeDirectory system home directory
+     */
+    public PooledConnectionFactory(Database database, String homeDirectory) {
+        this(database, homeDirectory, createDefaultPoolConfig());
     }
 
     /**
@@ -39,8 +49,19 @@ public class PooledConnectionFactory implements LadybugDBConnectionFactory {
      * @param poolConfig the pool configuration
      */
     public PooledConnectionFactory(Database database, GenericObjectPoolConfig<Connection> poolConfig) {
+        this(database, null, poolConfig);
+    }
+
+    /**
+     * Creates a pooled connection factory with custom pool configuration.
+     *
+     * @param database      the LadybugDB database instance
+     * @param homeDirectory system home directory
+     * @param poolConfig    the pool configuration
+     */
+    public PooledConnectionFactory(Database database, String homeDirectory, GenericObjectPoolConfig<Connection> poolConfig) {
         this.database = database;
-        this.pool = new GenericObjectPool<>(new ConnectionPooledObjectFactory(database), poolConfig);
+        this.pool = new GenericObjectPool<>(new ConnectionPooledObjectFactory(database, homeDirectory), poolConfig);
         logger.info("Created connection pool with maxTotal={}, maxIdle={}, minIdle={}",
                 poolConfig.getMaxTotal(), poolConfig.getMaxIdle(), poolConfig.getMinIdle());
     }
@@ -105,15 +126,35 @@ public class PooledConnectionFactory implements LadybugDBConnectionFactory {
     private static class ConnectionPooledObjectFactory extends BasePooledObjectFactory<Connection> {
 
         private final Database database;
+        private final String homeDirectory;
 
-        ConnectionPooledObjectFactory(Database database) {
+        ConnectionPooledObjectFactory(Database database, String homeDirectory) {
             this.database = database;
+            this.homeDirectory = homeDirectory;
         }
 
         @Override
         public Connection create() {
             logger.debug("Creating new connection for pool");
-            return new Connection(database);
+            Connection connection = new Connection(database);
+            configureHomeDirectory(connection);
+            return connection;
+        }
+
+        private void configureHomeDirectory(Connection connection) {
+            if (homeDirectory != null && !homeDirectory.isEmpty()) {
+                try (var result = connection.query("CALL home_directory='" + homeDirectory + "'")) {
+                    if (!result.isSuccess()) {
+                        throw new LadybugDBConnectionException(
+                                "Failed to set home_directory to '" + homeDirectory + "': " + result.getErrorMessage());
+                    }
+                } catch (LadybugDBConnectionException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new LadybugDBConnectionException(
+                            "Failed to set home_directory to '" + homeDirectory + "'", e);
+                }
+            }
         }
 
         @Override
