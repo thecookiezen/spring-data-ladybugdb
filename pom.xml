@@ -42,7 +42,7 @@
             <dependency>
                 <groupId>com.ladybugdb</groupId>
                 <artifactId>lbug</artifactId>
-                <version>0.15.2</version>
+                <version>0.16.0</version>
             </dependency>
             <dependency>
                 <groupId>org.neo4j</groupId>
