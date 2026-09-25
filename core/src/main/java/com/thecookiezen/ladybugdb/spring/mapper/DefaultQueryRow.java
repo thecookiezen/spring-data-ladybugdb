@@ -5,7 +5,9 @@ import com.ladybugdb.LbugStruct;
 import com.ladybugdb.Value;
 import com.ladybugdb.ValueRelUtil;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,6 +22,7 @@ public final class DefaultQueryRow implements QueryRow {
 
     private final Value[] values;
     private final Map<String, Integer> columnToIndex;
+    private final List<LbugStruct> openStructs = new ArrayList<>();
 
     /**
      * Creates a QueryRow from the raw values and column index map.
@@ -70,14 +73,18 @@ public final class DefaultQueryRow implements QueryRow {
             throw new IllegalArgumentException(
                     "Column '" + column + "' is not a NODE (type: " + value.getDataType().getID() + ")");
         }
-        try (LbugStruct struct = new LbugStruct(value)) {
-            int numFields = Long.valueOf(struct.getNumFields()).intValue();
-            Map<String, Value> ret = new HashMap<>(numFields);
-            for (int i = 0; i < numFields; ++i) {
-                ret.put(struct.getFieldNameByIndex((long) i), struct.getValueByIndex((long) i));
-            }
-            return ret;
+        // The struct wrapper clones the node value, and closing it would free the
+        // child values handed out in the returned map. Keep it open for the row's
+        // lifetime; it is released by close(), which the template invokes after
+        // the row mapper has finished.
+        LbugStruct struct = new LbugStruct(value);
+        openStructs.add(struct);
+        int numFields = Long.valueOf(struct.getNumFields()).intValue();
+        Map<String, Value> ret = new HashMap<>(numFields);
+        for (int i = 0; i < numFields; ++i) {
+            ret.put(struct.getFieldNameByIndex((long) i), struct.getValueByIndex((long) i));
         }
+        return ret;
     }
 
     @Override
@@ -110,5 +117,13 @@ public final class DefaultQueryRow implements QueryRow {
     @Override
     public Set<String> keySet() {
         return columnToIndex.keySet();
+    }
+
+    @Override
+    public void close() {
+        for (LbugStruct struct : openStructs) {
+            struct.close();
+        }
+        openStructs.clear();
     }
 }

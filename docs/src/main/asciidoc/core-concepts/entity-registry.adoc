@@ -181,11 +181,11 @@ EntityWriter<Document> documentWriter = (entity) -> {
 
 ==== QueryRow Interface
 
-The `QueryRow` provides access to row data:
+The `QueryRow` provides access to row data and implements `AutoCloseable`:
 
 [source,java]
 ----
-public interface QueryRow {
+public interface QueryRow extends AutoCloseable {
     // Get value by column name
     Value getValue(String column);
     
@@ -205,8 +205,20 @@ public interface QueryRow {
     
     // Get all column names
     Set<String> keySet();
+    
+    // Releases native resources held by this row (idempotent, never throws)
+    @Override
+    default void close() {}
 }
 ----
+
+[NOTE]
+====
+The template closes each row automatically once your `RowMapper` finishes.
+Values read from a row must not be used after it is closed. If you keep a row
+beyond the mapping callback, close it yourself — `QueryRow` works with
+try-with-resources.
+====
 
 ==== Registering Multiple Entities
 

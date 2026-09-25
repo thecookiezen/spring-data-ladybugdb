@@ -132,6 +132,21 @@ class LadybugDBTemplateTest {
         assertEquals(List.of("G1", "G2", "G3"), rowNumbers);
     }
 
+    @Test
+    void query_shouldSupportTryWithResourcesOnRow() {
+        template.execute("CREATE (p:Person {name: 'TWR', age: 50})");
+
+        List<String> names = template.query(
+                "MATCH (p:Person) RETURN p",
+                (row) -> {
+                    try (row) {
+                        return ValueMappers.asString(row.getNode("p").get("name"));
+                    }
+                });
+
+        assertEquals(List.of("TWR"), names);
+    }
+
     record PersonRecord(String name, int age) {
     }
 }

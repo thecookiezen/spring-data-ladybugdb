@@ -220,6 +220,7 @@ public class LadybugDBTemplate {
                     } catch (Exception e) {
                         throw new CypherMappingException("Error mapping row", e);
                     } finally {
+                        queryRow.close();
                         for (int i = 0; i < numColumns; i++) {
                             if (valuesArray[i] != null) {
                                 valuesArray[i].close();

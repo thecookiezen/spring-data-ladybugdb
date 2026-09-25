@@ -24,7 +24,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <revision>1.0.0-SNAPSHOT</revision>
         <java.version>21</java.version>
-        <spring-framework.version>6.2.17</spring-framework.version>
+        <spring-framework.version>7.0.9</spring-framework.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.16</logback.version>
         <assertj.version>3.27.7</assertj.version>
@@ -42,7 +42,7 @@
             <dependency>
                 <groupId>com.ladybugdb</groupId>
                 <artifactId>lbug</artifactId>
-                <version>0.15.2</version>
+                <version>0.20.4</version>
             </dependency>
             <dependency>
                 <groupId>org.neo4j</groupId>
@@ -57,7 +57,7 @@
             <dependency>
                 <groupId>org.springframework.data</groupId>
                 <artifactId>spring-data-commons</artifactId>
-                <version>3.5.10</version>
+                <version>4.1.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
