@@ -76,6 +76,13 @@ List<String> tags = ValueMappers.asStringList(node.get("tags"));
 List<Integer> years = ValueMappers.asIntegerList(node.get("years"));
 ----
 
+===== asFloatList
+
+[source,java]
+----
+List<Float> embedding = ValueMappers.asFloatList(node.get("embedding"));
+----
+
 ==== Array Types
 
 ===== asFloatArray
@@ -90,6 +97,9 @@ if (embedding != null) {
     System.out.println("Embedding dimension: " + embedding.length);
 }
 ----
+
+Both `asFloatArray` and `asFloatList` read from variable-size `LIST` columns
+and from fixed-size vector columns such as `FLOAT[4]`.
 
 ==== Null Safety
 
@@ -233,9 +243,13 @@ EntityWriter<Document> writer = (entity) -> {
 | `asDoubleList()`
 | LIST
 
+| `List<Float>`
+| `asFloatList()`
+| LIST / FLOAT[n]
+
 | `float[]`
 | `asFloatArray()`
-| LIST
+| LIST / FLOAT[n]
 
 | `List<T>`
 | `asList(mapper)`

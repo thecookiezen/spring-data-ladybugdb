@@ -97,6 +97,35 @@ vectorIndexes.rebuild("Note", "note_emb_idx", "embedding",
 
 `rebuild` also works when the index does not exist yet, acting as `create`.
 
+==== Updating Vectors
+
+An indexed vector property can be updated in place with `SET` while the HNSW
+index is live. The engine maintains the update as delete+insert inside the
+index with MVCC visibility: the new vector is immediately searchable and the
+old position is no longer returned:
+
+[source,java]
+----
+template.execute(
+        "MATCH (n:Note) WHERE n.id = $id SET n.embedding = $embedding",
+        Map.of("id", id, "embedding", new float[] {0.1f, 0.2f, 0.3f, 0.4f}));
+----
+
+Repository saves rely on the same mechanism. `save()` on an existing entity
+issues `MERGE (n:Note {id: $id}) SET n.embedding = $embedding, ...`, so a
+changed `float[]` property updates the vector in place — the historic
+workaround of storing embeddings in a separate node and doing
+delete-node + create-node on every save is no longer needed.
+
+IMPORTANT: `SET` on an indexed vector property requires LadybugDB >= 0.18.0,
+where HNSW vector updates were introduced. Version 0.20.4 or later is
+recommended: a crash when setting an indexed embedding while the HNSW index
+is live (upstream issue #896) was only fixed in 0.20.3/0.20.4.
+
+NOTE: For write-heavy workloads, periodically rebuild the vector index to
+compact away dead HNSW edges left behind by repeated updates and deletes —
+see <<Rebuilding an Index>>.
+
 ==== Listing Indexes
 
 `list()` maps the `CALL SHOW_INDEXES() RETURN *` result. It reports vector

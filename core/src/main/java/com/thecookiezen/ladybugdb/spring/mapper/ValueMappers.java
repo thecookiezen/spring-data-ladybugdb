@@ -1,5 +1,6 @@
 package com.thecookiezen.ladybugdb.spring.mapper;
 
+import com.ladybugdb.DataTypeID;
 import com.ladybugdb.LbugList;
 import com.ladybugdb.Value;
 
@@ -103,18 +104,18 @@ public final class ValueMappers {
             return List.of();
         }
 
-        try (LbugList lbugList = new LbugList(value)) {
-            long size = lbugList.getListSize();
-            List<T> result = new ArrayList<>((int) size);
+        long size = listSize(value);
+        List<T> result = new ArrayList<>((int) size);
 
+        try (LbugList lbugList = new LbugList(value)) {
             for (long i = 0; i < size; i++) {
                 try (Value element = lbugList.getListElement(i)) {
                     result.add(elementMapper.apply(element));
                 }
             }
-
-            return result;
         }
+
+        return result;
     }
 
     public static List<String> asStringList(Value value) {
@@ -137,27 +138,59 @@ public final class ValueMappers {
         return asList(value, ValueMappers::asBoolean);
     }
 
+    /**
+     * Maps a Value containing a list of floats to a List of Float.
+     *
+     * @param value the LadybugDB Value
+     * @return the list of floats, or an empty list if the value is null
+     */
+    public static List<Float> asFloatList(Value value) {
+        return asList(value, ValueMappers::asFloat);
+    }
+
+    private static Float asFloat(Value value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        Object raw = value.getValue();
+        if (raw instanceof Number n) {
+            return n.floatValue();
+        }
+        return Float.parseFloat(raw.toString());
+    }
+
     public static float[] asFloatArray(Value value) {
         if (value == null || value.isNull()) {
             return null;
         }
 
-        try (LbugList lbugList = new LbugList(value)) {
-            long size = lbugList.getListSize();
-            float[] result = new float[(int) size];
+        long size = listSize(value);
+        float[] result = new float[(int) size];
 
+        try (LbugList lbugList = new LbugList(value)) {
             for (long i = 0; i < size; i++) {
                 try (Value element = lbugList.getListElement(i)) {
-                    Object raw = element.getValue();
-                    if (raw instanceof Number n) {
-                        result[(int) i] = n.floatValue();
-                    } else {
-                        result[(int) i] = Float.parseFloat(raw.toString());
-                    }
+                    result[(int) i] = asFloat(element);
                 }
             }
+        }
 
-            return result;
+        return result;
+    }
+
+    /**
+     * Returns the number of elements of a list or fixed-size array value.
+     * <p>
+     * Fixed-size array values (e.g. {@code FLOAT[4]} vector columns, reported as
+     * {@link DataTypeID#ARRAY}) do not support {@link LbugList#getListSize()};
+     * their size is carried by the data type instead.
+     */
+    private static long listSize(Value value) {
+        if (value.getDataType().getID() == DataTypeID.ARRAY) {
+            return value.getDataType().getFixedNumElementsInList();
+        }
+        try (LbugList lbugList = new LbugList(value)) {
+            return lbugList.getListSize();
         }
     }
 }
