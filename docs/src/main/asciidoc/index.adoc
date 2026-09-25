@@ -55,6 +55,8 @@ include::querying/value-mappers.adoc[leveloffset=+1]
 
 include::vector/vector-indexes.adoc[leveloffset=+1]
 
+include::vector/filtered-vector-search.adoc[leveloffset=+1]
+
 [[repositories]]
 == Repositories
 

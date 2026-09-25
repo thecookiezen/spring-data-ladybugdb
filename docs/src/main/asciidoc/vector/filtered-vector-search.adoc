@@ -1,0 +1,208 @@
+=== Filtered Vector Search
+:rev: {project-version}
+
+KNN search usually needs filtering: "the nearest neighbours among the notes
+updated this year", "the nearest books from one publisher". Running KNN first
+and filtering the results in Java is wrong whenever the filter is selective —
+the `k` nearest neighbours globally may not contain a single matching node.
+
+LadybugDB solves this server-side with *projected graphs*: `CALL
+PROJECT_GRAPH(...)` materializes a subgraph selected by per-table Cypher
+predicates, and the vector extension runs `QUERY_VECTOR_INDEX` against that
+subgraph instead of the whole table. The `ProjectedGraphOperations` class wraps
+both sides.
+
+TIP: Projected graphs are a core engine feature — the lifecycle operations work
+without the vector extension. Only the KNN query loads the extension (see
+<<vector-indexes.adoc#_installation, Vector Index Management>> for the one-time
+`INSTALL vector` step).
+
+==== Obtaining ProjectedGraphOperations
+
+The template caches the instance:
+
+[source,java]
+----
+ProjectedGraphOperations projectedGraphs = template.projectedGraphs();
+----
+
+You can also construct it directly, e.g. to expose it as a Spring bean:
+
+[source,java]
+----
+@Bean
+ProjectedGraphOperations projectedGraphs(LadybugDBTemplate template) {
+    return new ProjectedGraphOperations(template);
+}
+----
+
+==== One-shot Filtered Search
+
+[IMPORTANT]
+====
+Projected graphs live **on the connection**. Outside a Spring transaction the
+template borrows and releases a connection per call, so a projection created by
+one call is gone by the next. The `search` methods are the safe path: they
+project, query and clean up on a single connection, with or without a
+transaction.
+====
+
+[source,java]
+----
+List<KnnHit> hits = projectedGraphs.search(
+        "note_emb_idx",                       // vector index name
+        queryVector,                          // float[] query vector
+        5,                                    // k
+        ProjectedGraphFilters.nodes(Map.of(
+                "Note", "n.updated_at > date('2026-01-01')")),
+        row -> new KnnHit(
+                ValueMappers.asString(row.getNode("node").get("id")),
+                ValueMappers.asDouble(row.getValue("distance"))));
+----
+
+Each result row exposes the matched node under the `node` column and its
+similarity as a double under `distance`. The results are the `k` nearest
+neighbours *of the filtered subgraph*, nearest first.
+
+`ProjectedGraphFilters` maps table names to optional Cypher predicates for
+nodes and relationships:
+
+[source,java]
+----
+// Filter node tables:
+ProjectedGraphFilters.nodes(Map.of("Book", "n.published_year > 2010"))
+
+// Filter nodes and relationships:
+ProjectedGraphFilters.nodesAndRels(
+        Map.of("Book", "n.published_year > 2010"),
+        Map.of("PublishedBy", "r.since > 2000"))
+
+// A blank predicate selects the whole table.
+----
+
+==== Lifecycle Inside a Transaction
+
+To reuse one projection across many queries — cheaper than re-projecting per
+query — create it inside a transaction: every call then runs on the
+transaction-bound connection and sees the graph.
+
+[source,java]
+----
+transactionTemplate.executeWithoutResult(status -> {
+    projectedGraphs.create("recent_books", ProjectedGraphFilters.nodes(
+            Map.of("Book", "n.published_year > 2010")));
+
+    for (float[] vector : vectors) {
+        projectedGraphs.queryVectorIndex("recent_books", "book_emb_idx",
+                vector, 5, hitMapper);
+    }
+
+    projectedGraphs.drop("recent_books");
+});
+----
+
+`create` is idempotent (returns `false` if a graph with that name already
+exists — drop it first to change the filter) and `drop` is tolerant of a
+missing graph. `list`, `find` and `exists` report the graphs of the current
+connection.
+
+`createFromCypher` projects from an arbitrary Cypher pattern instead of
+per-table predicates, mirroring `PROJECT_GRAPH_CYPHER`:
+
+[source,java]
+----
+projectedGraphs.createFromCypher("pearson_book",
+        "MATCH (b:Book)-[:PublishedBy]->(p:Publisher {name: $name}) RETURN b");
+----
+
+IMPORTANT: All three operations are only useful across calls inside a
+transaction. Outside one, each call gets a fresh connection, and the graph
+dies with the call that created it — the engine drops it when the connection
+is released.
+
+==== Search Tuning
+
+`VectorQueryOptions` carries the search tuning added to `QUERY_VECTOR_INDEX`:
+
+[source,java]
+----
+VectorQueryOptions options = VectorQueryOptions.builder()
+        .efs(150)                                       // candidate list size
+        .searchType(VectorQueryOptions.SearchType.NAVIX)
+        .build();
+
+projectedGraphs.queryVectorIndex("recent_books", "book_emb_idx",
+        queryVector, 5, options, hitMapper);
+projectedGraphs.search("book_emb_idx", queryVector, 5, filters, options, hitMapper);
+----
+
+`VectorQueryOptions.defaults()` passes no options (engine defaults). The
+supported search types are `AUTO`, `NAVIX`, `ADAPTIVE_L`, `ADAPTIVE_G`,
+`BLIND`, `DIRECTED`, `ONE_HOP`, `NAIVE` and `RANDOM`.
+
+==== Using Repositories
+
+`QUERY_VECTOR_INDEX` is plain Cypher, so repository `@Query` methods work
+without extra support — the projected graph name is just the first argument.
+The projection and the query must share the transaction-bound connection:
+
+[source,java]
+----
+interface BookRepository extends NodeRepository<Book, String, Tagged, Book> {
+
+    @Query(value = "CALL QUERY_VECTOR_INDEX('recent_books', 'book_emb', "
+            + "$queryVector, $k) RETURN node",
+            loadExtensions = {"vector"})
+    List<Book> findSimilarRecent(@Param("queryVector") float[] queryVector,
+            @Param("k") int k);
+}
+----
+
+[source,java]
+----
+transactionTemplate.executeWithoutResult(status -> {
+    projectedGraphs.create("recent_books", ProjectedGraphFilters.nodes(
+            Map.of("Book", "n.published_year > 2010")));
+    List<Book> similar = bookRepository.findSimilarRecent(vector, 5);
+});
+----
+
+==== Constraints and Caveats
+
+[cols="1,3"]
+|===
+|Constraint |Detail
+
+|Connection lifetime
+|Projected graphs are dropped when their connection is released. Create and
+query inside one transaction, or use `search`.
+
+|One node table
+|The engine's filtered search supports projections of exactly one node table.
+`search` rejects filters without a node table up front.
+
+|Connected tables
+|Projecting a filtered node table together with relationship tables requires
+every table connected to those relationships to be projected too — the engine
+rejects the projection otherwise.
+
+|Blank predicates
+|`search` passes blank predicates to the engine as `TRUE`, because the
+filtered search compiles each predicate into a `MATCH ... WHERE ...` filter
+query and cannot parse empty ones.
+
+|Distance thresholds
+|`QUERY_VECTOR_INDEX` does not support distance-threshold filtering: results
+are always the `k` nearest neighbours. Clients wanting a similarity cut-off
+post-filter by score:
+
+[source,java]
+----
+hits.stream().filter(hit -> hit.distance() <= threshold).toList();
+----
+
+|Index required
+|The vector index must exist on the underlying table (see
+<<vector-indexes.adoc#_creating-an-index, Creating an Index>>); projections
+reuse it.
+|===
