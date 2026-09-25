@@ -14,7 +14,7 @@ import java.util.Set;
  * multiple
  * nodes and relationships (e.g., {@code MATCH (a)-[r]->(b) RETURN a, r, b}).
  */
-public interface QueryRow {
+public interface QueryRow extends AutoCloseable {
 
     /**
      * Gets the raw Value at the specified column.
@@ -80,4 +80,19 @@ public interface QueryRow {
      * @return the column names
      */
     Set<String> keySet();
+
+    /**
+     * Releases native resources held by this row. Values obtained from this row
+     * (including node and relationship property values) must not be used after
+     * closing. {@link com.thecookiezen.ladybugdb.spring.core.LadybugDBTemplate}
+     * invokes this automatically once the row mapper has finished, so callers
+     * only need to close rows they keep beyond the mapping callback.
+     * <p>
+     * Implementations must be idempotent. Declared as a no-throw override of
+     * {@link AutoCloseable#close()} so the row can be used with
+     * try-with-resources without handling checked exceptions.
+     */
+    @Override
+    default void close() {
+    }
 }
