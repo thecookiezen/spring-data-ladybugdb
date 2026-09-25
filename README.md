@@ -212,6 +212,11 @@ Install the extension once per environment (requires network access):
 template.execute("INSTALL vector");
 ```
 
+Updating an indexed vector works in place: entities with `float[]`
+properties are saved as `SET` updates (no delete-and-recreate), which the
+engine applies to the live HNSW index directly. This requires LadybugDB
+>= 0.18.0; >= 0.20.4 is recommended.
+
 The full API is documented in the docs module under *Vector Search › Vector
 Index Management*.
 

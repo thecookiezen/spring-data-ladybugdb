@@ -190,5 +190,45 @@ class ValueMappersTest {
             List<String> numsAsStrings = ValueMappers.asList(row.getValue(0), s -> "num:" + s);
             assertEquals(List.of("num:10", "num:20", "num:30"), numsAsStrings);
         }
+
+        @Test
+        void asFloatList_shouldMapFloatArray() {
+            conn.query("CREATE NODE TABLE Test(id STRING PRIMARY KEY, vec FLOAT[3])");
+            conn.query("CREATE (t:Test {id: 'test', vec: [1.5, 2.5, 3.5]})");
+
+            QueryResult result = conn.query("MATCH (t:Test) RETURN t.vec");
+            assertTrue(result.hasNext());
+            var row = result.getNext();
+
+            List<Float> vec = ValueMappers.asFloatList(row.getValue(0));
+            assertEquals(List.of(1.5f, 2.5f, 3.5f), vec);
+        }
+
+        @Test
+        void asFloatList_shouldReturnEmptyListForNull() {
+            assertEquals(List.of(), ValueMappers.asFloatList(null));
+        }
+    }
+
+    @Nested
+    class VectorTypes {
+
+        @Test
+        void asFloatArray_shouldMapFixedFloatList() {
+            conn.query("CREATE NODE TABLE Test(id STRING PRIMARY KEY, vec FLOAT[4])");
+            conn.query("CREATE (t:Test {id: 'test', vec: [0.1, 0.2, 0.3, 0.4]})");
+
+            QueryResult result = conn.query("MATCH (t:Test) RETURN t.vec");
+            assertTrue(result.hasNext());
+            var row = result.getNext();
+
+            float[] vec = ValueMappers.asFloatArray(row.getValue(0));
+            assertArrayEquals(new float[] {0.1f, 0.2f, 0.3f, 0.4f}, vec, 0.0001f);
+        }
+
+        @Test
+        void asFloatArray_shouldReturnNullForNullValue() {
+            assertNull(ValueMappers.asFloatArray(null));
+        }
     }
 }

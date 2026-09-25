@@ -71,3 +71,47 @@ public class Knows {
 * Source and target must be the exact same node type.
 * The `@Id` field stores the relationship's primary key.
 * `sourceField` and `targetField` reference node entity fields.
+
+==== Vector Properties
+
+A `float[]` field maps to a fixed-size LadybugDB vector column,
+e.g. `FLOAT[4]`. `Float[]` and `List<Float>` fields are also accepted; the
+dimension is enforced by the table DDL, not by the mapping.
+
+[source,java]
+----
+@NodeEntity(label = "Note")
+public class Note {
+    @Id
+    private String id;
+    private float[] embedding;  // FLOAT[4] column
+}
+----
+
+The table must declare the matching fixed-size column:
+
+[source,cypher]
+----
+CREATE NODE TABLE Note(id STRING PRIMARY KEY, embedding FLOAT[4])
+----
+
+Reading uses `ValueMappers.asFloatArray()` (or `asFloatList()`); writing just
+passes the array through the `EntityWriter` — the template binds it as a
+`FLOAT` list:
+
+[source,java]
+----
+RowMapper<Note> reader = (row) -> {
+    Map<String, Value> node = row.getNode("n");
+    return new Note(
+        ValueMappers.asString(node.get("id")),
+        ValueMappers.asFloatArray(node.get("embedding"))
+    );
+};
+
+EntityWriter<Note> writer = (note) -> Map.of("embedding", note.getEmbedding());
+----
+
+Saving an entity with a changed vector issues a `SET` update, so vectors used
+by an HNSW index are updated in place. See xref:vector/vector-indexes.adoc[Vector
+Index Management] for the engine version requirements and rebuild guidance.
