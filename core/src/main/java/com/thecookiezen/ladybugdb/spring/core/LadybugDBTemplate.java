@@ -11,6 +11,7 @@ import com.thecookiezen.ladybugdb.spring.mapper.QueryRow;
 import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
 import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
 import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+import com.thecookiezen.ladybugdb.spring.vector.VectorIndexOperations;
 import org.neo4j.cypherdsl.core.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,10 +44,39 @@ public class LadybugDBTemplate {
 
     private final LadybugDBConnectionFactory connectionFactory;
     private final EntityRegistry entityRegistry;
+    private final VectorIndexOperations vectorIndexOperations;
 
     public LadybugDBTemplate(LadybugDBConnectionFactory connectionFactory, EntityRegistry entityRegistry) {
         this.connectionFactory = connectionFactory;
         this.entityRegistry = entityRegistry;
+        this.vectorIndexOperations = new VectorIndexOperations(this);
+    }
+
+    /**
+     * Returns the vector index lifecycle operations bound to this template.
+     * The same instance is returned on every call.
+     *
+     * @return the vector index operations
+     */
+    public VectorIndexOperations vectorIndexes() {
+        return vectorIndexOperations;
+    }
+
+    /**
+     * Execute an operation using a callback function, loading the given
+     * extensions on the connection first.
+     * The connection is managed automatically based on transaction context.
+     *
+     * @param extensions extensions to load before the callback runs
+     * @param action     the callback to execute
+     * @param <T>        the result type
+     * @return the result of the callback
+     */
+    public <T> T execute(String[] extensions, LadybugDBCallback<T> action) {
+        return execute(connection -> {
+            loadExtensions(connection, extensions);
+            return action.doInLadybugDB(connection);
+        });
     }
 
     /**
