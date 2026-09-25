@@ -14,7 +14,6 @@ import com.thecookiezen.ladybugdb.spring.repository.NodeRepository;
 import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
 import com.thecookiezen.ladybugdb.spring.repository.support.LadybugDBRepositoryFactory;
 import com.thecookiezen.ladybugdb.spring.transaction.LadybugDBTransactionManager;
-import com.thecookiezen.ladybugdb.spring.repository.NodeRepository;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;

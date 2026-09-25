@@ -89,14 +89,14 @@ public class ProjectedGraphOperations {
      *                                  characters that cannot appear in a graph name
      */
     public boolean create(String name, ProjectedGraphFilters filters) {
-        requireName(name, "name");
+        CypherSupport.requireName(name, "name");
         Objects.requireNonNull(filters, "filters must not be null");
 
         if (exists(name)) {
             return false;
         }
 
-        String cypher = "CALL PROJECT_GRAPH(" + ProjectedGraphFilters.cypherLiteral(name) + ", "
+        String cypher = "CALL PROJECT_GRAPH(" + CypherSupport.literal(name) + ", "
                 + filters.toCypherNodeFilters() + ", " + filters.toCypherRelFilters() + ")";
         try {
             execute(cypher);
@@ -127,7 +127,7 @@ public class ProjectedGraphOperations {
      *                                  or the Cypher pattern is blank
      */
     public boolean createFromCypher(String name, String cypher) {
-        requireName(name, "name");
+        CypherSupport.requireName(name, "name");
         if (cypher == null || cypher.isBlank()) {
             throw new IllegalArgumentException("cypher must not be null or blank");
         }
@@ -136,8 +136,8 @@ public class ProjectedGraphOperations {
             return false;
         }
 
-        String statement = "CALL PROJECT_GRAPH_CYPHER(" + ProjectedGraphFilters.cypherLiteral(name)
-                + ", " + ProjectedGraphFilters.cypherLiteral(cypher) + ")";
+        String statement = "CALL PROJECT_GRAPH_CYPHER(" + CypherSupport.literal(name)
+                + ", " + CypherSupport.literal(cypher) + ")";
         try {
             execute(statement);
             return true;
@@ -160,14 +160,14 @@ public class ProjectedGraphOperations {
      *                                  characters that cannot appear in a graph name
      */
     public boolean drop(String name) {
-        requireName(name, "name");
+        CypherSupport.requireName(name, "name");
 
         if (!exists(name)) {
             return false;
         }
 
         try {
-            execute("CALL DROP_PROJECTED_GRAPH(" + ProjectedGraphFilters.cypherLiteral(name) + ")");
+            execute("CALL DROP_PROJECTED_GRAPH(" + CypherSupport.literal(name) + ")");
             return true;
         } catch (RuntimeException e) {
             throw new ProjectedGraphException("Failed to drop projected graph '" + name + "'", e);
@@ -190,7 +190,7 @@ public class ProjectedGraphOperations {
      * @return the graph info, or empty if no such graph is projected
      */
     public Optional<ProjectedGraphInfo> find(String name) {
-        requireName(name, "name");
+        CypherSupport.requireName(name, "name");
         return list().stream()
                 .filter(graph -> graph.name().equals(name))
                 .findFirst();
@@ -260,8 +260,8 @@ public class ProjectedGraphOperations {
      */
     public <T> List<T> queryVectorIndex(String graphName, String indexName, float[] queryVector,
             int k, VectorQueryOptions options, RowMapper<T> rowMapper) {
-        requireName(graphName, "graphName");
-        requireName(indexName, "indexName");
+        CypherSupport.requireName(graphName, "graphName");
+        CypherSupport.requireName(indexName, "indexName");
         requireVector(queryVector);
         if (k <= 0) {
             throw new IllegalArgumentException("k must be positive, got: " + k);
@@ -269,8 +269,7 @@ public class ProjectedGraphOperations {
         Objects.requireNonNull(options, "options must not be null");
         Objects.requireNonNull(rowMapper, "rowMapper must not be null");
 
-        String cypher = "CALL QUERY_VECTOR_INDEX('" + graphName + "', '" + indexName
-                + "', $queryVector, $k" + options.toCypherOptions() + ") RETURN node, distance";
+        String cypher = knnStatement(graphName, indexName, options);
         try {
             return template.query(EXTENSIONS, cypher,
                     Map.of("queryVector", queryVector.clone(), "k", (long) k), rowMapper);
@@ -340,7 +339,7 @@ public class ProjectedGraphOperations {
      */
     public <T> List<T> search(String indexName, float[] queryVector, int k,
             ProjectedGraphFilters filters, VectorQueryOptions options, RowMapper<T> rowMapper) {
-        requireName(indexName, "indexName");
+        CypherSupport.requireName(indexName, "indexName");
         requireVector(queryVector);
         if (k <= 0) {
             throw new IllegalArgumentException("k must be positive, got: " + k);
@@ -436,7 +435,7 @@ public class ProjectedGraphOperations {
     private static void dropOnConnection(Connection connection, String name) {
         if (existsOnConnection(connection, name)) {
             executeOnConnection(connection,
-                    "CALL DROP_PROJECTED_GRAPH(" + ProjectedGraphFilters.cypherLiteral(name) + ")");
+                    "CALL DROP_PROJECTED_GRAPH(" + CypherSupport.literal(name) + ")");
         }
     }
 
@@ -455,8 +454,20 @@ public class ProjectedGraphOperations {
     private static void createOnConnection(Connection connection, String name,
             ProjectedGraphFilters filters) {
         executeOnConnection(connection, "CALL PROJECT_GRAPH("
-                + ProjectedGraphFilters.cypherLiteral(name) + ", "
+                + CypherSupport.literal(name) + ", "
                 + filters.toCypherNodeFilters() + ", " + filters.toCypherRelFilters() + ")");
+    }
+
+    /**
+     * Builds the shared shape of both KNN entry points:
+     * {@code CALL QUERY_VECTOR_INDEX(graph, index, $queryVector, $k ...)},
+     * returning the {@code node} and {@code distance} columns of each row.
+     */
+    private static String knnStatement(String graphName, String indexName,
+            VectorQueryOptions options) {
+        return "CALL QUERY_VECTOR_INDEX(" + CypherSupport.literal(graphName) + ", "
+                + CypherSupport.literal(indexName) + ", $queryVector, $k"
+                + options.toCypherOptions() + ") RETURN node, distance";
     }
 
     /**
@@ -468,8 +479,7 @@ public class ProjectedGraphOperations {
     private static <T> List<T> queryVectorIndexOnConnection(Connection connection, String graphName,
             String indexName, float[] queryVector, int k, VectorQueryOptions options,
             RowMapper<T> rowMapper) {
-        String cypher = "CALL QUERY_VECTOR_INDEX('" + graphName + "', '" + indexName
-                + "', $queryVector, $k" + options.toCypherOptions() + ") RETURN node, distance";
+        String cypher = knnStatement(graphName, indexName, options);
 
         Map<String, Value> parameters = new HashMap<>(2);
         parameters.put("queryVector", toVectorValue(queryVector));
@@ -533,19 +543,6 @@ public class ProjectedGraphOperations {
                 closeable.close();
             } catch (Exception e) {
                 logger.debug("Error closing resource", e);
-            }
-        }
-    }
-
-    private static void requireName(String name, String what) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException(what + " must not be null or blank");
-        }
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (c == '\'' || c == '"' || c == '\\' || c == '`' || c == ';' || Character.isISOControl(c)) {
-                throw new IllegalArgumentException(
-                        what + " contains unsupported character '" + c + "': '" + name + "'");
             }
         }
     }

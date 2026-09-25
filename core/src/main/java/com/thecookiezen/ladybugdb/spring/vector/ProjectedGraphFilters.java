@@ -95,8 +95,8 @@ public record ProjectedGraphFilters(Map<String, String> nodeFilters, Map<String,
                 if (cypher.length() > 1) {
                     cypher.append(", ");
                 }
-                cypher.append(cypherLiteral(table)).append(": ")
-                        .append(cypherLiteral(predicate == null ? "" : predicate));
+                cypher.append(CypherSupport.literal(table)).append(": ")
+                        .append(CypherSupport.literal(predicate == null ? "" : predicate));
             });
             cypher.append('}');
         } else {
@@ -105,23 +105,11 @@ public record ProjectedGraphFilters(Map<String, String> nodeFilters, Map<String,
                 if (cypher.length() > 1) {
                     cypher.append(", ");
                 }
-                cypher.append(cypherLiteral(table));
+                cypher.append(CypherSupport.literal(table));
             }
             cypher.append(']');
         }
         return cypher.toString();
-    }
-
-    /**
-     * Renders a string as a double-quoted Cypher literal. The engine's parser
-     * does not accept doubled quotes inside single-quoted literals, so the
-     * literal is delimited with double quotes and inner double quotes are
-     * backslash-escaped; single quotes then pass through untouched.
-     *
-     * @return the quoted literal
-     */
-    static String cypherLiteral(String raw) {
-        return '"' + raw.replace("\"", "\\\"") + '"';
     }
 
     private static Map<String, String> validatedCopy(Map<String, String> filters, String what) {
