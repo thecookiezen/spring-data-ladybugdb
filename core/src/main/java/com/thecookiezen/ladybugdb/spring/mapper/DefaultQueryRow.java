@@ -1,6 +1,7 @@
 package com.thecookiezen.ladybugdb.spring.mapper;
 
 import com.ladybugdb.DataTypeID;
+import com.ladybugdb.FlatTuple;
 import com.ladybugdb.LbugStruct;
 import com.ladybugdb.Value;
 import com.ladybugdb.ValueRelUtil;
@@ -17,6 +18,10 @@ import java.util.Set;
  * <p>
  * Uses {@link LbugStruct} to extract node properties and {@link ValueRelUtil}
  * to extract relationship data.
+ * <p>
+ * The row owns its values: {@link #bind(FlatTuple)} releases the values of the
+ * previous row and takes over the values of the new one, and {@link #close()}
+ * releases everything held by the row.
  */
 public final class DefaultQueryRow implements QueryRow {
 
@@ -25,14 +30,26 @@ public final class DefaultQueryRow implements QueryRow {
     private final List<LbugStruct> openStructs = new ArrayList<>();
 
     /**
-     * Creates a QueryRow from the raw values and column index map.
+     * Creates an empty QueryRow sized to the given column map.
      *
-     * @param values        the array of values for this row
      * @param columnToIndex the shared map of column names to indices
      */
-    public DefaultQueryRow(Value[] values, Map<String, Integer> columnToIndex) {
-        this.values = values;
+    public DefaultQueryRow(Map<String, Integer> columnToIndex) {
         this.columnToIndex = columnToIndex;
+        this.values = new Value[columnToIndex.size()];
+    }
+
+    /**
+     * Binds the values of the given tuple to this row. Any values bound
+     * previously are released first.
+     *
+     * @param tuple the tuple holding the values of the current result row
+     */
+    public void bind(FlatTuple tuple) {
+        closeValues();
+        for (int i = 0; i < values.length; i++) {
+            values[i] = tuple.getValue(i);
+        }
     }
 
     @Override
@@ -125,5 +142,15 @@ public final class DefaultQueryRow implements QueryRow {
             struct.close();
         }
         openStructs.clear();
+        closeValues();
+    }
+
+    private void closeValues() {
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+                values[i].close();
+                values[i] = null;
+            }
+        }
     }
 }

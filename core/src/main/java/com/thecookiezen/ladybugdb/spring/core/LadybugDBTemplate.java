@@ -194,8 +194,7 @@ public class LadybugDBTemplate {
                 columnToIndex.put(result.getColumnName(i), i);
             }
 
-            Value[] valuesArray = new Value[numColumns];
-            QueryRow queryRow = new DefaultQueryRow(valuesArray, columnToIndex);
+            DefaultQueryRow queryRow = new DefaultQueryRow(columnToIndex);
 
             final QueryResult finalResult = result;
             final PreparedStatement finalStatement = statement;
@@ -211,22 +210,12 @@ public class LadybugDBTemplate {
 
                 @Override
                 public T next() {
-                    var row = finalResult.getNext();
-                    try {
-                        for (int i = 0; i < numColumns; i++) {
-                            valuesArray[i] = row.getValue(i);
-                        }
+                    var tuple = finalResult.getNext();
+                    try (queryRow) {
+                        queryRow.bind(tuple);
                         return rowMapper.mapRow(queryRow);
                     } catch (Exception e) {
                         throw new CypherMappingException("Error mapping row", e);
-                    } finally {
-                        queryRow.close();
-                        for (int i = 0; i < numColumns; i++) {
-                            if (valuesArray[i] != null) {
-                                valuesArray[i].close();
-                                valuesArray[i] = null;
-                            }
-                        }
                     }
                 }
             };
