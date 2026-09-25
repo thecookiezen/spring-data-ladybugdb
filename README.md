@@ -186,11 +186,41 @@ template.execute("INSTALL vector");
 template.execute("CALL home_directory='/path/to/extensions'");
 ```
 
+### Vector Index Management
+
+For managing HNSW vector indexes, use `VectorIndexOperations` instead of
+hand-writing `CALL CREATE_VECTOR_INDEX(...)` strings with error-message
+parsing. The operations are idempotent, tolerant of missing indexes, and load
+the `vector` extension for you:
+
+```java
+VectorIndexOperations vectorIndexes = template.vectorIndexes();
+
+// Idempotent: returns false if the index already exists
+vectorIndexes.create("Note", "note_emb_idx", "embedding",
+        HnswOptions.builder().metric(HnswOptions.Metric.COSINE).efc(200).build());
+
+// Documented maintenance operation for write-heavy workloads (DROP + CREATE)
+vectorIndexes.rebuild("Note", "note_emb_idx", "embedding");
+
+List<VectorIndexInfo> indexes = vectorIndexes.listVectorIndexes();
+```
+
+Install the extension once per environment (requires network access):
+
+```java
+template.execute("INSTALL vector");
+```
+
+The full API is documented in the docs module under *Vector Search › Vector
+Index Management*.
+
 ## Components
 
 | Component | Description |
 |-----------|-------------|
 | `LadybugDBTemplate` | Central class for executing Cypher queries |
+| `VectorIndexOperations` | Managed lifecycle API for HNSW vector indexes (create/drop/rebuild/list) |
 | `SimpleNodeRepository` | Repository implementation for node entities |
 | `LadybugDBTransactionManager` | Transaction manager (connection binding only, no commit/rollback) |
 | `PooledConnectionFactory` | Connection pool using Apache Commons Pool2 |

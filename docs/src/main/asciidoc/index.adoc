@@ -50,6 +50,11 @@ include::querying/row-mappers.adoc[leveloffset=+1]
 
 include::querying/value-mappers.adoc[leveloffset=+1]
 
+[[vector]]
+== Vector Search
+
+include::vector/vector-indexes.adoc[leveloffset=+1]
+
 [[repositories]]
 == Repositories
 

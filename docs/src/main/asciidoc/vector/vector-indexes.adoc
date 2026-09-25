@@ -1,0 +1,154 @@
+=== Vector Index Management
+:rev: {project-version}
+
+The `VectorIndexOperations` class provides a managed API for the lifecycle of
+HNSW vector indexes exposed by the LadybugDB vector extension. It replaces
+hand-written `CALL CREATE_VECTOR_INDEX(...)` / `CALL DROP_VECTOR_INDEX(...)`
+strings and fragile error-message parsing with idempotent Java methods.
+
+==== Installation
+
+The operations automatically run `LOAD vector` on the connection before every
+call. The extension itself must be installed once per environment, which
+requires network access to the LadybugDB extension repository:
+
+[source,java]
+----
+template.execute("INSTALL vector");
+----
+
+NOTE: `LOAD` is per connection, which is why every operation loads it for you.
+`INSTALL` downloads the extension to the local extension directory and is only
+needed once (or after an upgrade).
+
+==== Obtaining VectorIndexOperations
+
+The easiest way is through the template, which caches the instance:
+
+[source,java]
+----
+VectorIndexOperations vectorIndexes = template.vectorIndexes();
+----
+
+You can also construct it directly, e.g. to expose it as a Spring bean:
+
+[source,java]
+----
+@Bean
+VectorIndexOperations vectorIndexes(LadybugDBTemplate template) {
+    return new VectorIndexOperations(template);
+}
+----
+
+==== Creating an Index
+
+`create` is idempotent: it returns `true` if the index was created and `false`
+if an index with that name already existed on the table — no exception is
+thrown for the "already exists" case, and an existing index is never modified.
+
+[source,java]
+----
+boolean created = vectorIndexes.create(
+        "Note",          // table name
+        "note_emb_idx",  // index name
+        "embedding",     // FLOAT[] property to index
+        HnswOptions.builder()
+                .metric(HnswOptions.Metric.COSINE)
+                .efc(200)
+                .build());
+
+if (!created) {
+    // Index already existed; nothing was changed.
+}
+----
+
+`HnswOptions` mirrors the named arguments of `CREATE_VECTOR_INDEX`. The
+defaults match the engine defaults (mu=30, ml=60, pu=0.05, metric=cosine,
+efc=200, cache_embeddings=true); use the builder to override individual
+values. The supported metrics are `COSINE`, `L2`, `L2SQ`, `DOTPRODUCT` and
+`IP`.
+
+IMPORTANT: Table, index and property names must not contain quotes,
+backslashes, semicolons or control characters. `VectorIndexOperations`
+validates the names and fails fast with an `IllegalArgumentException`
+instead of letting the engine fail with a confusing parser error.
+
+==== Dropping an Index
+
+`drop` is tolerant of a missing index and returns whether the index existed:
+
+[source,java]
+----
+boolean dropped = vectorIndexes.drop("Note", "note_emb_idx");
+----
+
+==== Rebuilding an Index
+
+The vector extension documentation recommends periodically rebuilding HNSW
+indexes for write-heavy workloads: dead edges accumulate after updates and
+deletes and degrade search performance over time. The documented rebuild
+pattern is DROP + CREATE, exposed as a single call:
+
+[source,java]
+----
+vectorIndexes.rebuild("Note", "note_emb_idx", "embedding",
+        HnswOptions.builder().efc(250).build());
+----
+
+`rebuild` also works when the index does not exist yet, acting as `create`.
+
+==== Listing Indexes
+
+`list()` maps the `CALL SHOW_INDEXES() RETURN *` result. It reports vector
+(HNSW) indexes as well as core indexes — LadybugDB always includes the primary
+key HASH index:
+
+[source,java]
+----
+for (VectorIndexInfo index : vectorIndexes.list()) {
+    System.out.println(index.tableName() + " / " + index.indexName()
+            + " (" + index.indexType() + ")");
+}
+
+// Vector (HNSW) indexes only:
+List<VectorIndexInfo> vectorOnly = vectorIndexes.listVectorIndexes();
+----
+
+`VectorIndexInfo` carries the table name, index name, index type, indexed
+properties, whether the owning extension is loaded, and the index definition
+(the Cypher statement that recreates the index).
+
+`exists` and `find` answer point questions without scanning the list yourself:
+
+[source,java]
+----
+if (vectorIndexes.exists("Note", "note_emb_idx")) { ... }
+
+Optional<VectorIndexInfo> info = vectorIndexes.find("Note", "note_emb_idx");
+----
+
+==== Transactions and Connections
+
+All operations run through `LadybugDBTemplate` and therefore reuse its
+connection management: inside a Spring transaction they run on the
+transaction-bound connection; outside they borrow and release a connection per
+operation.
+
+==== Failure Semantics
+
+[cols="1,3"]
+|===
+|Situation |Behavior
+
+|Index already exists (`create`)
+|Returns `false`, no exception
+
+|Index does not exist (`drop`)
+|Returns `false`, no exception
+
+|Unknown table or non-vector property
+|`VectorIndexException`
+
+|Invalid (null, blank, or quoted) name
+|`IllegalArgumentException`
+|===
