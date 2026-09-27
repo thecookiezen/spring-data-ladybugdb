@@ -11,6 +11,7 @@ import com.thecookiezen.ladybugdb.spring.mapper.QueryRow;
 import com.thecookiezen.ladybugdb.spring.mapper.RowMapper;
 import com.thecookiezen.ladybugdb.spring.repository.support.EntityDescriptor;
 import com.thecookiezen.ladybugdb.spring.repository.support.EntityRegistry;
+import com.thecookiezen.ladybugdb.spring.vector.ProjectedGraphOperations;
 import com.thecookiezen.ladybugdb.spring.vector.VectorIndexOperations;
 import org.neo4j.cypherdsl.core.Statement;
 import org.slf4j.Logger;
@@ -45,11 +46,13 @@ public class LadybugDBTemplate {
     private final LadybugDBConnectionFactory connectionFactory;
     private final EntityRegistry entityRegistry;
     private final VectorIndexOperations vectorIndexOperations;
+    private final ProjectedGraphOperations projectedGraphOperations;
 
     public LadybugDBTemplate(LadybugDBConnectionFactory connectionFactory, EntityRegistry entityRegistry) {
         this.connectionFactory = connectionFactory;
         this.entityRegistry = entityRegistry;
         this.vectorIndexOperations = new VectorIndexOperations(this);
+        this.projectedGraphOperations = new ProjectedGraphOperations(this);
     }
 
     /**
@@ -60,6 +63,16 @@ public class LadybugDBTemplate {
      */
     public VectorIndexOperations vectorIndexes() {
         return vectorIndexOperations;
+    }
+
+    /**
+     * Returns the projected graph operations bound to this template. The same
+     * instance is returned on every call.
+     *
+     * @return the projected graph operations
+     */
+    public ProjectedGraphOperations projectedGraphs() {
+        return projectedGraphOperations;
     }
 
     /**

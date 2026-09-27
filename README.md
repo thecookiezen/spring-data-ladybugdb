@@ -220,12 +220,40 @@ engine applies to the live HNSW index directly. This requires LadybugDB
 The full API is documented in the docs module under *Vector Search › Vector
 Index Management*.
 
+### Filtered Vector Search
+
+KNN results can be filtered server-side with projected graphs: `PROJECT_GRAPH`
+materializes a subgraph selected by per-table Cypher predicates, and the vector
+extension runs `QUERY_VECTOR_INDEX` against it — so `k` nearest neighbours are
+found *within the filter*, instead of filtering `k` results in Java:
+
+```java
+ProjectedGraphOperations projectedGraphs = template.projectedGraphs();
+
+// One-shot: projects, queries and cleans up on a single connection
+List<KnnHit> hits = projectedGraphs.search("note_emb_idx", queryVector, 5,
+        ProjectedGraphFilters.nodes(Map.of("Note", "n.updated_at > date('2026-01-01')")),
+        row -> new KnnHit(
+                ValueMappers.asString(row.getNode("node").get("id")),
+                ValueMappers.asDouble(row.getValue("distance"))));
+```
+
+Projected graphs live on the connection: to reuse one projection across many
+queries, create and query it inside a transaction. Search tuning
+(`efs`, `search_type`) is available via `VectorQueryOptions`. Note that
+`QUERY_VECTOR_INDEX` does not support distance-threshold filtering — clients
+post-filter by score.
+
+The full API is documented in the docs module under *Vector Search › Filtered
+Vector Search*.
+
 ## Components
 
 | Component | Description |
 |-----------|-------------|
 | `LadybugDBTemplate` | Central class for executing Cypher queries |
 | `VectorIndexOperations` | Managed lifecycle API for HNSW vector indexes (create/drop/rebuild/list) |
+| `ProjectedGraphOperations` | Server-side filtered KNN via projected graphs (create/search/drop) |
 | `SimpleNodeRepository` | Repository implementation for node entities |
 | `LadybugDBTransactionManager` | Transaction manager (connection binding only, no commit/rollback) |
 | `PooledConnectionFactory` | Connection pool using Apache Commons Pool2 |

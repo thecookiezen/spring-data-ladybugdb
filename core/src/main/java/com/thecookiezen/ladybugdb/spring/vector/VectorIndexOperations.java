@@ -90,9 +90,9 @@ public class VectorIndexOperations {
      *                                  characters that cannot appear in an index name
      */
     public boolean create(String tableName, String indexName, String propertyName, HnswOptions options) {
-        requireName(tableName, "tableName");
-        requireName(indexName, "indexName");
-        requireName(propertyName, "propertyName");
+        CypherSupport.requireName(tableName, "tableName");
+        CypherSupport.requireName(indexName, "indexName");
+        CypherSupport.requireName(propertyName, "propertyName");
         Objects.requireNonNull(options, "options must not be null");
 
         if (exists(tableName, indexName)) {
@@ -126,8 +126,8 @@ public class VectorIndexOperations {
      *                                  characters that cannot appear in an index name
      */
     public boolean drop(String tableName, String indexName) {
-        requireName(tableName, "tableName");
-        requireName(indexName, "indexName");
+        CypherSupport.requireName(tableName, "tableName");
+        CypherSupport.requireName(indexName, "indexName");
 
         if (!exists(tableName, indexName)) {
             return false;
@@ -240,18 +240,5 @@ public class VectorIndexOperations {
             }
             return null;
         });
-    }
-
-    private static void requireName(String name, String what) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException(what + " must not be null or blank");
-        }
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (c == '\'' || c == '"' || c == '\\' || c == '`' || c == ';' || Character.isISOControl(c)) {
-                throw new IllegalArgumentException(
-                        what + " contains unsupported character '" + c + "': '" + name + "'");
-            }
-        }
     }
 }
